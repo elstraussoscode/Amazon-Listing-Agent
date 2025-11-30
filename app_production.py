@@ -8,9 +8,9 @@ import pandas as pd
 import openpyxl
 from openai import OpenAI
 import io
-from typing import Dict, List, Optional, Annotated
+from typing import Dict, List, Optional
 import logging
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 import tempfile
 import os
 import re
@@ -24,25 +24,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Pydantic Models - max_length in characters (UTF-8 umlauts = 2 bytes, so ~180 chars ≈ 200 bytes)
-BulletPoint = Annotated[str, StringConstraints(max_length=180)]
-
+# Pydantic Models - NO max_length constraints (let AI generate full content, then trim with ensure_length_with_ai)
 class ProductContent(BaseModel):
     """AI-generated Amazon listing content"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(max_length=180, description="Produkttitel: MAX 180 Zeichen")
-    bullet_points: List[BulletPoint] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte")
-    suchbegriffe: str = Field(max_length=220, description="Keywords: MAX 220 Zeichen")
+    artikelname: str = Field(description="Produkttitel mit USP und Alleinstellungsmerkmal")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 vollständige Sätze als Aufzählungspunkte")
+    suchbegriffe: str = Field(description="Relevante Suchbegriffe, durch Leerzeichen getrennt")
 
 class CosmoOptimizedContent(BaseModel):
     """COSMO/RUFUS optimized Amazon listing content"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(max_length=180, description="Produkttitel: MAX 180 Zeichen")
-    produktbeschreibung: str = Field(max_length=1800, description="Produktbeschreibung: MAX 1800 Zeichen")
-    bullet_points: List[BulletPoint] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte")
-    suchbegriffe: str = Field(max_length=220, description="Keywords: MAX 220 Zeichen")
+    artikelname: str = Field(description="Produkttitel mit USP und Alleinstellungsmerkmal")
+    produktbeschreibung: str = Field(description="Ausführliche Produktbeschreibung")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 vollständige Sätze als Aufzählungspunkte")
+    suchbegriffe: str = Field(description="Relevante Suchbegriffe, durch Leerzeichen getrennt")
 
 # Default Prompt
 DEFAULT_PROMPT = """Erstelle einen optimierten Amazon-Listing für folgendes Produkt:
@@ -78,25 +76,31 @@ DEFAULT_PROMPT = """Erstelle einen optimierten Amazon-Listing für folgendes Pro
 14. has_certification - Zertifikate, Prüfsiegel
 15. enables_activity - Ermöglichte Aktivitäten, Erlebnisse
 
-TITEL-STRUKTUR (nach Kundenrelevanz & Differenzierung!):
+📌 TITEL-STRUKTUR - MACHE IHN EINZIGARTIG:
 1. Marke (falls bekannt)
-2. WAS ist es? (Produktart klar)
-3. USP - Was macht es BESSER als die Konkurrenz?
-4. Wichtigste differenzierende Eigenschaften (Material, Kapazität, Besonderheit)
-5. Relevante Variante (Größe/Farbe falls nötig)
+2. Produktart + WAS macht es BESONDERS?
+3. Hauptvorteil/USP in 2-3 Worten
+4. Wichtigste Eigenschaft (Material/Größe/Feature)
+5. Variante falls relevant
+BEISPIEL: "ALADDIN Aveo Kindertrinkflasche 350ml – Auslaufsicher mit Ein-Hand-Verschluss, Tritan BPA-frei"
+NICHT: "ALADDIN Aveo Trinkflasche 350ml Blau BPA-frei Tritan Spülmaschinengeeignet" (= nur Fakten-Liste)
 
-BULLET POINTS - STRIKT NACH KUNDENWICHTIGKEIT:
-1. 🔥 HAUPTNUTZEN + BESONDERHEIT: Der größte Vorteil! Was macht es einzigartig?
-2. 💎 QUALITÄT/MATERIAL: Woraus? Spezielle Eigenschaften? Zertifikate?
-3. 🎯 ANWENDUNG: Wie/Wo/Wofür? Besondere Einsatzmöglichkeiten?
-4. ⭐ FEATURES: Technische Besonderheiten, innovative Details
-5. 📦 EXTRAS: Lieferumfang, Zubehör, Garantie, Service
+📌 BULLET POINTS - VOLLSTÄNDIGE SÄTZE:
+Jeder Bullet Point MUSS ein vollständiger, abgeschlossener Satz sein!
+NIEMALS mitten im Satz abbrechen!
+Struktur: VORTEIL: Erklärung in einem Satz.
 
-⚠️ LÄNGEN-REGELN IN BYTES (KRITISCH - NUTZE DEN PLATZ!):
-1. Artikelname: 170-200 BYTES (mindestens 85%!), Umlaute = 2 Bytes!
-2. Bullet Points: Je 170-200 BYTES (mindestens 85%!), KEINE Nummerierung
-3. Suchbegriffe: 225-250 BYTES (mindestens 90%!)
-HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
+1. HAUPTVORTEIL: Was ist der größte Nutzen für den Kunden?
+2. MATERIAL/QUALITÄT: Woraus besteht es und warum ist das gut?
+3. ANWENDUNG: Wo und wie wird es benutzt?
+4. BESONDERHEIT: Was unterscheidet es von anderen Produkten?
+5. LIEFERUMFANG: Was ist enthalten?
+
+⚠️ EXAKTE LÄNGEN-LIMITS (STRIKT EINHALTEN!):
+- Titel: EXAKT 200 BYTES MAXIMUM (nutze 170-200, also 85-100%)
+- Bullet Points: Je EXAKT 200 BYTES MAXIMUM (nutze 170-200, also 85-100%)
+- Keywords: EXAKT 250 BYTES MAXIMUM (nutze 212-250, also 85-100%)
+ACHTUNG: Umlaute (ä,ö,ü,ß) = je 2 Bytes!
 
 🔑 KEYWORDS/SUCHBEGRIFFE - STRATEGIE:
 - Synonyme für Produktbezeichnung (z.B. "Trinkflasche" → "Wasserflasche, Sportflasche")
@@ -168,26 +172,32 @@ Produktdaten:
 14. has_certification - Zertifikate, Prüfsiegel
 15. enables_activity - Ermöglichte Aktivitäten, Erlebnisse
 
-TITEL-STRUKTUR (nach Kundenrelevanz & Differenzierung!):
-1. Marke (falls bekannt/relevant)
-2. WAS ist es? (Produktart sofort klar)
-3. USP - Was macht es BESSER als die Konkurrenz?
-4. Wichtigste differenzierende Eigenschaften (Material, Kapazität, Besonderheit)
-5. Relevante Variante (Größe/Farbe falls nötig)
+📌 TITEL-STRUKTUR - MACHE IHN EINZIGARTIG:
+1. Marke (falls bekannt)
+2. Produktart + WAS macht es BESONDERS?
+3. Hauptvorteil/USP in 2-3 Worten
+4. Wichtigste Eigenschaft (Material/Größe/Feature)
+5. Variante falls relevant
+BEISPIEL: "ALADDIN Aveo Kindertrinkflasche 350ml – Auslaufsicher mit Ein-Hand-Verschluss, Tritan BPA-frei"
+NICHT: "ALADDIN Aveo Trinkflasche 350ml Blau BPA-frei Tritan Spülmaschinengeeignet" (= nur Fakten-Liste)
 
-BULLET POINTS - STRIKT NACH KUNDENWICHTIGKEIT SORTIEREN:
-1. 🔥 HAUPTNUTZEN + BESONDERHEIT: Der größte Vorteil! Was macht es einzigartig?
-2. 💎 QUALITÄT/MATERIAL: Woraus? Spezielle Eigenschaften? Zertifikate?
-3. 🎯 ANWENDUNG: Wie/Wo/Wofür? Besondere Einsatzmöglichkeiten?
-4. ⭐ FEATURES: Technische Besonderheiten, innovative Details
-5. 📦 EXTRAS: Lieferumfang, Zubehör, Garantie, Service
+📌 BULLET POINTS - VOLLSTÄNDIGE SÄTZE:
+Jeder Bullet Point MUSS ein vollständiger, abgeschlossener Satz sein!
+NIEMALS mitten im Satz abbrechen!
+Struktur: VORTEIL: Erklärung in einem Satz.
 
-⚠️ LÄNGEN-REGELN IN BYTES (KRITISCH - NUTZE DEN PLATZ MAXIMAL!):
-1. TITEL: 170-200 BYTES (mindestens 85%!), Umlaute = 2 Bytes!
-2. BULLET POINTS: Je 170-200 BYTES (mindestens 85%!)
-3. BESCHREIBUNG: 1700-2000 BYTES (mindestens 85%!)
-4. KEYWORDS: 225-250 BYTES (mindestens 90%!) - NUR neue Begriffe!
-HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
+1. HAUPTVORTEIL: Was ist der größte Nutzen für den Kunden?
+2. MATERIAL/QUALITÄT: Woraus besteht es und warum ist das gut?
+3. ANWENDUNG: Wo und wie wird es benutzt?
+4. BESONDERHEIT: Was unterscheidet es von anderen Produkten?
+5. LIEFERUMFANG: Was ist enthalten?
+
+⚠️ EXAKTE LÄNGEN-LIMITS (STRIKT EINHALTEN!):
+- Titel: EXAKT 200 BYTES MAXIMUM (nutze 170-200, also 85-100%)
+- Bullet Points: Je EXAKT 200 BYTES MAXIMUM (nutze 170-200, also 85-100%)
+- Beschreibung: EXAKT 2000 BYTES MAXIMUM (nutze 1700-2000, also 85-100%)
+- Keywords: EXAKT 250 BYTES MAXIMUM (nutze 212-250, also 85-100%)
+ACHTUNG: Umlaute (ä,ö,ü,ß) = je 2 Bytes!
 
 🔑 KEYWORDS/SUCHBEGRIFFE - STRATEGIE:
 - Synonyme für Produktbezeichnung (z.B. "Trinkflasche" → "Wasserflasche, Sportflasche")
