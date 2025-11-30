@@ -24,23 +24,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Pydantic Models
+# Pydantic Models - with max_length constraints to help model generate appropriate lengths
+# Note: max_length is in characters, not bytes. Using ~150 chars for 200 byte limit (accounting for German umlauts = 2 bytes)
 class ProductContent(BaseModel):
     """AI-generated Amazon listing content"""
     model_config = {"extra": "forbid"}  # Required for Responses API
     
-    artikelname: str = Field(description="Optimierter Produkttitel: 170-200 BYTES (Umlaute=2 Bytes!). Marke + Produkt + USP + differenzierende Eigenschaften")
-    bullet_points: List[str] = Field(description="5 Aufzählungspunkte: Je 170-200 BYTES. Kundennutzen priorisiert, sauberes Deutsch", min_length=5, max_length=5)
-    suchbegriffe: str = Field(description="Keywords: 225-250 BYTES (90%!). Synonyme, Long-Tail-Keywords, Kundeneigenschaften. KEINE komplementären Produkte!")
+    artikelname: str = Field(max_length=160, description="Produkttitel: MAX 160 ZEICHEN (~200 Bytes). Marke + Produkt + USP")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte: Je MAX 160 ZEICHEN (~200 Bytes)")
+    suchbegriffe: str = Field(max_length=200, description="Keywords: MAX 200 ZEICHEN (~250 Bytes). Synonyme, Long-Tail")
 
 class CosmoOptimizedContent(BaseModel):
     """COSMO/RUFUS optimized Amazon listing content"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(description="Optimierter Produkttitel: 170-200 BYTES. Marke + Produkt + USP + differenzierende Eigenschaften")
-    produktbeschreibung: str = Field(description="Detaillierte Produktbeschreibung: 1700-2000 BYTES. Alle 15 COSMO-Beziehungstypen abdecken")
-    bullet_points: List[str] = Field(description="5 Aufzählungspunkte: Je 170-200 BYTES. Verkaufsstark, nutzenorientiert, sauberes Deutsch", min_length=5, max_length=5)
-    suchbegriffe: str = Field(description="Keywords: 225-250 BYTES (90%!). Synonyme, Long-Tail-Keywords, Kundeneigenschaften. KEINE komplementären Produkte!")
+    artikelname: str = Field(max_length=160, description="Produkttitel: MAX 160 ZEICHEN (~200 Bytes). Marke + Produkt + USP")
+    produktbeschreibung: str = Field(max_length=1600, description="Produktbeschreibung: MAX 1600 ZEICHEN (~2000 Bytes)")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte: Je MAX 160 ZEICHEN (~200 Bytes)")
+    suchbegriffe: str = Field(max_length=200, description="Keywords: MAX 200 ZEICHEN (~250 Bytes). Synonyme, Long-Tail")
 
 # Default Prompt
 DEFAULT_PROMPT = """Erstelle einen optimierten Amazon-Listing für folgendes Produkt:
