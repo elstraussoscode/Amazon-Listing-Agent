@@ -29,38 +29,93 @@ class ProductContent(BaseModel):
     """AI-generated Amazon listing content"""
     model_config = {"extra": "forbid"}  # Required for Responses API
     
-    artikelname: str = Field(description="Optimierter Produkttitel, max 200 Zeichen")
-    bullet_points: List[str] = Field(description="5 Aufzählungspunkte, je max 250 Zeichen", min_length=5, max_length=5)
-    suchbegriffe: str = Field(description="5 Suchbegriffe durch Komma getrennt")
+    artikelname: str = Field(description="Optimierter Produkttitel: 170-200 BYTES (Umlaute=2 Bytes!). Marke + Produkt + USP + differenzierende Eigenschaften")
+    bullet_points: List[str] = Field(description="5 Aufzählungspunkte: Je 170-200 BYTES. Kundennutzen priorisiert, sauberes Deutsch", min_length=5, max_length=5)
+    suchbegriffe: str = Field(description="Keywords: 225-250 BYTES (90%!). Synonyme, Long-Tail-Keywords, Kundeneigenschaften. KEINE komplementären Produkte!")
 
 class CosmoOptimizedContent(BaseModel):
     """COSMO/RUFUS optimized Amazon listing content"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(description="Optimierter Produkttitel (Max 200 Zeichen, inkl. Leerzeichen). Fokus: Brand + Produktart + USP + Variation.")
-    produktbeschreibung: str = Field(description="Detaillierte Produktbeschreibung (Max 2000 Zeichen). Muss alle 15 COSMO-Beziehungstypen abdecken.")
-    bullet_points: List[str] = Field(description="5 Aufzählungspunkte (Je max 250 Zeichen). Verkaufsstark & nutzenorientiert.", min_length=5, max_length=5)
-    suchbegriffe: str = Field(description="Keywords (Max 249 Bytes/Zeichen). Relevante Begriffe, NICHT in Titel/Bullets wiederholen!")
+    artikelname: str = Field(description="Optimierter Produkttitel: 170-200 BYTES. Marke + Produkt + USP + differenzierende Eigenschaften")
+    produktbeschreibung: str = Field(description="Detaillierte Produktbeschreibung: 1700-2000 BYTES. Alle 15 COSMO-Beziehungstypen abdecken")
+    bullet_points: List[str] = Field(description="5 Aufzählungspunkte: Je 170-200 BYTES. Verkaufsstark, nutzenorientiert, sauberes Deutsch", min_length=5, max_length=5)
+    suchbegriffe: str = Field(description="Keywords: 225-250 BYTES (90%!). Synonyme, Long-Tail-Keywords, Kundeneigenschaften. KEINE komplementären Produkte!")
 
 # Default Prompt
 DEFAULT_PROMPT = """Erstelle einen optimierten Amazon-Listing für folgendes Produkt:
 
 {{product_data}}
 
-WICHTIG - Amazon COSMO & RUFUS Optimierung (2025):
-- Fokus auf KONTEXT statt Keywords
-- Natürliche, hilfreiche Sprache
-- Beantworte diese Fragen intern (NICHT im Text erwähnen!):
-  * Was ist das Produkt?
-  * Für wen ist es?
-  * Welches Problem löst es?
-  * Was macht es besonders?
-  * Wie wird es verwendet?
+🎯 DENKE WIE EIN KUNDE! Was will der Käufer WIRKLICH wissen?
 
-REGELN:
-1. Artikelname: Max 200 Zeichen, relevant, kein Keyword-Stuffing
-2. Bullet Points: Je max 250 Zeichen, KEINE Nummerierung (1., 2., etc.), natürlich lesbar
-3. Suchbegriffe: 5 relevante Begriffe durch Komma getrennt"""
+🔍 ANALYSIERE DIE PRODUKTDATEN - Finde BESONDERE EIGENSCHAFTEN:
+- Gibt es spezielle Materialien? (z.B. Edelstahl, BPA-frei, recycelt)
+- Besondere Maße/Kapazität? (z.B. extra groß, kompakt, XL-Fassungsvermögen)
+- Einzigartige Features? (z.B. doppelwandig, auslaufsicher, spülmaschinenfest)
+- Zertifizierungen? (z.B. TÜV, CE, LFGB, FDA)
+- Besondere Herstellung? (z.B. handgefertigt, Made in Germany)
+- Innovative Technologie? (z.B. Vakuumisolierung, Anti-Rutsch)
+- Umweltaspekte? (z.B. plastikfrei, nachhaltig, wiederverwendbar)
+- Set-Inhalt/Zubehör? (z.B. inkl. Deckel, mit Tragetasche)
+
+✅ COSMO-/RUFUS 15 SEMANTISCHE BEZIEHUNGSTYPEN (INTERN - decke ALLE inhaltlich ab!):
+1. is - Was ist das Produkt?
+2. has_property - Eigenschaften (Farbe, Material, Größe, Form...)
+3. has_component - Teile, Zubehör, Bestandteile
+4. used_for - Verwendungszweck, Funktion
+5. used_in - Situation, Umgebung, Ort der Nutzung
+6. used_by - Zielgruppe, Nutzertyp
+7. used_with - Kombinationsprodukte, passt zu...
+8. made_of - Material, Rohstoffe
+9. has_quality - Qualitätsmerkmale, Haltbarkeit
+10. has_brand - Marke, Markenbotschaft
+11. has_style - Stil, Design, Ästhetik
+12. targets_audience - Detaillierte Zielgruppe
+13. associated_with - Themen (Nachhaltigkeit, Gesundheit, Sport...)
+14. has_certification - Zertifikate, Prüfsiegel
+15. enables_activity - Ermöglichte Aktivitäten, Erlebnisse
+
+TITEL-STRUKTUR (nach Kundenrelevanz & Differenzierung!):
+1. Marke (falls bekannt)
+2. WAS ist es? (Produktart klar)
+3. USP - Was macht es BESSER als die Konkurrenz?
+4. Wichtigste differenzierende Eigenschaften (Material, Kapazität, Besonderheit)
+5. Relevante Variante (Größe/Farbe falls nötig)
+
+BULLET POINTS - STRIKT NACH KUNDENWICHTIGKEIT:
+1. 🔥 HAUPTNUTZEN + BESONDERHEIT: Der größte Vorteil! Was macht es einzigartig?
+2. 💎 QUALITÄT/MATERIAL: Woraus? Spezielle Eigenschaften? Zertifikate?
+3. 🎯 ANWENDUNG: Wie/Wo/Wofür? Besondere Einsatzmöglichkeiten?
+4. ⭐ FEATURES: Technische Besonderheiten, innovative Details
+5. 📦 EXTRAS: Lieferumfang, Zubehör, Garantie, Service
+
+⚠️ LÄNGEN-REGELN IN BYTES (KRITISCH - NUTZE DEN PLATZ!):
+1. Artikelname: 170-200 BYTES (mindestens 85%!), Umlaute = 2 Bytes!
+2. Bullet Points: Je 170-200 BYTES (mindestens 85%!), KEINE Nummerierung
+3. Suchbegriffe: 225-250 BYTES (mindestens 90%!)
+HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
+
+🔑 KEYWORDS/SUCHBEGRIFFE - STRATEGIE:
+- Synonyme für Produktbezeichnung (z.B. "Trinkflasche" → "Wasserflasche, Sportflasche")
+- Wichtige Kundeneigenschaften (z.B. "auslaufsicher", "BPA-frei", "spülmaschinenfest")
+- Long-Tail-Keywords aus Kundensicht (z.B. "Flasche für Fitnessstudio", "Trinkflasche Büro")
+- Relevante Anwendungsfälle (z.B. "Outdoor", "Wandern", "Sport")
+- KEINE komplementären Produkte (FALSCH: "passend zu Rucksack")
+- KEINE Begriffe die bereits im Titel oder Bullets stehen!
+
+🚫 VERBOTEN IM OUTPUT (NUR natürliche Kundensprache!):
+- Schreibe NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
+- KEINE Verweise auf COSMO, RUFUS oder "Beziehungstypen"
+
+✍️ STILISTISCHE REGELN (sauberes Deutsch!):
+- KEINE Pleonasmen/Redundanzen (FALSCH: "dichter Dichtung", "runder Kreis", "neuer Neuheit")
+- KEINE Wortwiederholungen im selben Satz
+- Präzise Formulierungen statt Füllwörter
+- Natürlicher Lesefluss, keine holprigen Konstruktionen
+- Variiere Satzanfänge und Struktur
+
+WICHTIG: Nutze den Platz maximal aus! Hebe BESONDERE Eigenschaften hervor! Aber ERFINDE NICHTS - nur relevante, korrekte Inhalte."""
 
 # COSMO Prompt
 COSMO_PROMPT = """Erstelle ein vollständig COSMO & RUFUS optimiertes Amazon-Listing für folgendes Produkt.
@@ -68,40 +123,77 @@ COSMO_PROMPT = """Erstelle ein vollständig COSMO & RUFUS optimiertes Amazon-Lis
 Produktdaten:
 {{product_data}}
 
-✅ COSMO-/RUFUS-Check: Decke ALLE 15 semantischen Beziehungstypen ab:
-1. is (Was ist es?)
-2. has_property (Eigenschaften: Farbe, Material, Größe...)
-3. has_component (Teile/Zubehör)
-4. used_for (Verwendungszweck)
-5. used_in (Situation/Umgebung)
-6. used_by (Zielgruppe/Nutzer)
-7. used_with (Kombinationsprodukte)
-8. made_of (Material)
-9. has_quality (Qualitätsmerkmale)
-10. has_brand (Marke/Botschaft)
-11. has_style (Stil/Design)
-12. targets_audience (Zielgruppe detailliert)
-13. associated_with (Themen: Nachhaltigkeit, Gesundheit...)
-14. has_certification (Zertifikate)
-15. enables_activity (Ermöglichte Aktivität)
+🎯 DENKE WIE EIN KUNDE! Was will der Käufer WIRKLICH wissen?
 
-WICHTIG - LENGTH LIMITS (STRICT):
-1. TITEL: Maximal 200 Zeichen! (Ideal: 150-180)
-   - Format: [Marke] [Produktart] [Wichtigstes Merkmal/USP] [Farbe/Größe]
-2. BULLET POINTS: 5 Stück, jeweils MAXIMAL 250 Zeichen!
-   - Jeder Punkt muss einen konkreten Kundennutzen ansprechen.
-   - Keine reinen Keyword-Listen.
-3. BESCHREIBUNG: Maximal 2000 Zeichen.
-   - Fließtext, gut lesbar, integriert die 15 COSMO-Aspekte natürlich.
-4. KEYWORDS (Suchbegriffe): Maximal 249 Bytes (ca. 240 Zeichen).
-   - NUR Wörter, die NICHT im Titel oder den Bullets stehen!
-   - Synonyme, Falschschreibweisen, spezifische Nischenbegriffe.
+🔍 ANALYSIERE DIE PRODUKTDATEN - Finde BESONDERE EIGENSCHAFTEN:
+- Gibt es spezielle Materialien? (z.B. Edelstahl, BPA-frei, recycelt, Borosilikatglas)
+- Besondere Maße/Kapazität? (z.B. extra groß, kompakt, XL-Fassungsvermögen)
+- Einzigartige Features? (z.B. doppelwandig, auslaufsicher, spülmaschinenfest)
+- Zertifizierungen? (z.B. TÜV, CE, LFGB, FDA, ISO)
+- Besondere Herstellung? (z.B. handgefertigt, Made in Germany, traditionell)
+- Innovative Technologie? (z.B. Vakuumisolierung, Anti-Rutsch, Thermofunktion)
+- Umweltaspekte? (z.B. plastikfrei, nachhaltig, wiederverwendbar, CO2-neutral)
+- Set-Inhalt/Zubehör? (z.B. inkl. Deckel, mit Tragetasche, Ersatzteile)
+- Design-Besonderheiten? (z.B. ergonomisch, minimalistisch, zeitlos)
 
-STRUKTUR:
-1. Titel: Optimiert mit Wer, Was, Wofür, Wie.
-2. Beschreibung: Ausführlich, deckt alle 15 Punkte ab.
-3. Bullet Points: 5 Stück, verkaufsstark, nutzenorientiert.
-4. Keywords: Nur NEUE, relevante Begriffe.
+✅ COSMO-/RUFUS 15 SEMANTISCHE BEZIEHUNGSTYPEN (INTERN - decke ALLE inhaltlich ab!):
+1. is - Was ist das Produkt?
+2. has_property - Eigenschaften (Farbe, Material, Größe, Form...)
+3. has_component - Teile, Zubehör, Bestandteile
+4. used_for - Verwendungszweck, Funktion
+5. used_in - Situation, Umgebung, Ort der Nutzung
+6. used_by - Zielgruppe, Nutzertyp
+7. used_with - Kombinationsprodukte, passt zu...
+8. made_of - Material, Rohstoffe
+9. has_quality - Qualitätsmerkmale, Haltbarkeit
+10. has_brand - Marke, Markenbotschaft
+11. has_style - Stil, Design, Ästhetik
+12. targets_audience - Detaillierte Zielgruppe
+13. associated_with - Themen (Nachhaltigkeit, Gesundheit, Sport...)
+14. has_certification - Zertifikate, Prüfsiegel
+15. enables_activity - Ermöglichte Aktivitäten, Erlebnisse
+
+TITEL-STRUKTUR (nach Kundenrelevanz & Differenzierung!):
+1. Marke (falls bekannt/relevant)
+2. WAS ist es? (Produktart sofort klar)
+3. USP - Was macht es BESSER als die Konkurrenz?
+4. Wichtigste differenzierende Eigenschaften (Material, Kapazität, Besonderheit)
+5. Relevante Variante (Größe/Farbe falls nötig)
+
+BULLET POINTS - STRIKT NACH KUNDENWICHTIGKEIT SORTIEREN:
+1. 🔥 HAUPTNUTZEN + BESONDERHEIT: Der größte Vorteil! Was macht es einzigartig?
+2. 💎 QUALITÄT/MATERIAL: Woraus? Spezielle Eigenschaften? Zertifikate?
+3. 🎯 ANWENDUNG: Wie/Wo/Wofür? Besondere Einsatzmöglichkeiten?
+4. ⭐ FEATURES: Technische Besonderheiten, innovative Details
+5. 📦 EXTRAS: Lieferumfang, Zubehör, Garantie, Service
+
+⚠️ LÄNGEN-REGELN IN BYTES (KRITISCH - NUTZE DEN PLATZ MAXIMAL!):
+1. TITEL: 170-200 BYTES (mindestens 85%!), Umlaute = 2 Bytes!
+2. BULLET POINTS: Je 170-200 BYTES (mindestens 85%!)
+3. BESCHREIBUNG: 1700-2000 BYTES (mindestens 85%!)
+4. KEYWORDS: 225-250 BYTES (mindestens 90%!) - NUR neue Begriffe!
+HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
+
+🔑 KEYWORDS/SUCHBEGRIFFE - STRATEGIE:
+- Synonyme für Produktbezeichnung (z.B. "Trinkflasche" → "Wasserflasche, Sportflasche")
+- Wichtige Kundeneigenschaften (z.B. "auslaufsicher", "BPA-frei", "spülmaschinenfest")
+- Long-Tail-Keywords aus Kundensicht (z.B. "Flasche für Fitnessstudio", "Trinkflasche Büro")
+- Relevante Anwendungsfälle (z.B. "Outdoor", "Wandern", "Sport")
+- KEINE komplementären Produkte (FALSCH: "passend zu Rucksack")
+- KEINE Begriffe die bereits im Titel oder Bullets stehen!
+
+🚫 VERBOTEN IM OUTPUT (NUR natürliche Kundensprache!):
+- Schreibe NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
+- KEINE Verweise auf COSMO, RUFUS oder "Beziehungstypen"
+
+✍️ STILISTISCHE REGELN (sauberes Deutsch!):
+- KEINE Pleonasmen/Redundanzen (FALSCH: "dichter Dichtung", "runder Kreis", "neuer Neuheit")
+- KEINE Wortwiederholungen im selben Satz
+- Präzise Formulierungen statt Füllwörter
+- Natürlicher Lesefluss, keine holprigen Konstruktionen
+- Variiere Satzanfänge und Struktur
+
+WICHTIG: Nutze den Platz MAXIMAL! Hebe BESONDERE Eigenschaften hervor! Aber ERFINDE NICHTS - nur relevante, korrekte Inhalte.
 """
 
 # Page Config
@@ -170,6 +262,92 @@ with st.sidebar:
 
 # Main Tabs
 tab1, tab4, tab2, tab3 = st.tabs(["📝 Template Filler", "✍️ Content-Optimierung", "📊 Preview", "⚙️ Settings"])
+
+# Helper function to get byte length (UTF-8) - GLOBAL
+def get_byte_length(text: str) -> int:
+    return len(text.encode('utf-8'))
+
+# Helper function to enforce length with AI regeneration (BYTES, not chars!) - GLOBAL
+def ensure_length_with_ai(text: str, max_bytes: int, field_name: str, client_instance, max_retries: int = 3) -> str:
+    current_bytes = get_byte_length(text)
+    if current_bytes <= max_bytes:
+        return text
+    
+    # Target 80% to leave buffer for AI imprecision
+    target_bytes = int(max_bytes * 0.80)
+    logger.info(f"⚠️ {field_name} too long ({current_bytes} bytes). Target: ~{target_bytes} bytes (max {max_bytes})...")
+    
+    current_text = text
+    for attempt in range(max_retries):
+        current_bytes = get_byte_length(current_text)
+        if current_bytes <= max_bytes:
+            logger.info(f"✅ {field_name} shortened to {current_bytes} bytes")
+            return current_text
+        
+        # Calculate how much to cut - be aggressive
+        ratio = target_bytes / current_bytes
+        target_chars = int(len(current_text) * ratio * 0.9)  # Extra 10% buffer
+        
+        shorten_prompt = f"""KÜRZE diesen Text auf MAXIMAL {target_chars} ZEICHEN (ca. {target_bytes} Bytes).
+
+STRIKT: Der gekürzte Text MUSS kürzer als {max_bytes} Bytes sein!
+Aktuell: {current_bytes} Bytes - zu lang!
+
+REGELN:
+1. Behalte die wichtigsten Infos
+2. Streiche Füllwörter und Redundanzen
+3. Komprimiere ohne Sinnverlust
+4. Umlaute (ä,ö,ü,ß) zählen als 2 Bytes!
+
+Text zum Kürzen:
+{current_text}
+
+Antworte NUR mit dem gekürzten Text:"""
+        
+        try:
+            resp = client_instance.chat.completions.create(
+                model="gpt-5.1",
+                messages=[
+                    {"role": "system", "content": f"Kürze auf MAXIMAL {target_chars} Zeichen. Sei AGGRESSIV beim Kürzen!"},
+                    {"role": "user", "content": shorten_prompt}
+                ],
+                max_completion_tokens=int(target_chars * 1.5)  # Limit output tokens (GPT-5.1 parameter)
+            )
+            new_text = resp.choices[0].message.content.strip()
+            
+            # Remove quotes if AI added them
+            if new_text.startswith('"') and new_text.endswith('"'):
+                new_text = new_text[1:-1]
+            if new_text.startswith("'") and new_text.endswith("'"):
+                new_text = new_text[1:-1]
+            
+            new_bytes = get_byte_length(new_text)
+            logger.info(f"  Attempt {attempt+1}: {new_bytes} bytes")
+            
+            if new_bytes <= max_bytes:
+                logger.info(f"✅ {field_name} shortened to {new_bytes} bytes")
+                return new_text
+            
+            current_text = new_text
+            target_bytes = int(target_bytes * 0.85)  # Even more aggressive next round
+            
+        except Exception as e:
+            logger.error(f"Error regenerating text: {e}")
+            break
+    
+    # Final fallback: smart truncation
+    logger.warning(f"⚠️ {field_name}: Truncating after {max_retries} attempts")
+    encoded = current_text.encode('utf-8')
+    if len(encoded) > max_bytes:
+        # Find last space before limit for clean cut
+        truncated = encoded[:max_bytes-3].decode('utf-8', errors='ignore')
+        last_space = truncated.rfind(' ')
+        if last_space > max_bytes * 0.7:
+            truncated = truncated[:last_space] + "..."
+        else:
+            truncated = truncated + "..."
+        return truncated
+    return current_text
 
 with tab1:
     st.header("📝 Automatisches Template-Befüllen")
@@ -291,42 +469,6 @@ with tab1:
                 st.error(f"❌ Template-Analyse fehlgeschlagen: {e}")
                 logger.error(f"Template analysis error: {e}", exc_info=True)
     
-    
-    # Helper function to enforce length with AI regeneration
-    def ensure_length_with_ai(text: str, max_length: int, field_name: str, client_instance) -> str:
-        if len(text) <= max_length:
-            return text
-            
-        logger.info(f"⚠️ {field_name} too long ({len(text)} chars). Regenerating to fit {max_length} chars...")
-        
-        shorten_prompt = f"""Kürze den folgenden Text für Amazon auf MAXIMAL {max_length} Zeichen.
-        WICHTIG: Erhalte die Kernaussage und wichtige Keywords!
-        
-        Original Text:
-        {text}
-        
-        Antworte NUR mit dem gekürzten Text:"""
-        
-        try:
-            resp = client_instance.chat.completions.create(
-                model="gpt-5.1",
-                messages=[
-                    {"role": "system", "content": "Du bist ein präziser Redakteur. Kürze Texte ohne Inhaltsverlust."},
-                    {"role": "user", "content": shorten_prompt}
-                ]
-            )
-            new_text = resp.choices[0].message.content.strip()
-            
-            # Fallback if still too long (truncate nicely)
-            if len(new_text) > max_length:
-                logger.warning(f"⚠️ Still too long after regeneration ({len(new_text)}). Truncating.")
-                return new_text[:max_length-3] + "..."
-            
-            return new_text
-        except Exception as e:
-            logger.error(f"Error regenerating text: {e}")
-            return text[:max_length-3] + "..."
-
     # Processing Section
     if products_df is not None and template_bytes and format_info:
         st.markdown("---")
@@ -447,21 +589,21 @@ Antworte NUR mit dem exakten Product Type Namen, nichts anderes."""
                         
                         content = ProductContent.model_validate_json(response.choices[0].message.content)
                         
-                        # Enforce hard limits with AI regeneration
-                        if len(content.artikelname) > 200:
+                        # Enforce hard limits with AI regeneration (BYTES, not chars!)
+                        if get_byte_length(content.artikelname) > 200:
                             content.artikelname = ensure_length_with_ai(content.artikelname, 200, "Titel", client)
                             
                         new_bullets = []
                         for i, bp in enumerate(content.bullet_points):
-                            if len(bp) > 250:
-                                new_bp = ensure_length_with_ai(bp, 250, f"Bullet {i+1}", client)
+                            if get_byte_length(bp) > 200:  # MAX 200 BYTES für Bullet Points!
+                                new_bp = ensure_length_with_ai(bp, 200, f"Bullet {i+1}", client)
                                 new_bullets.append(new_bp)
                             else:
                                 new_bullets.append(bp)
                         content.bullet_points = new_bullets
                         
-                        if len(content.suchbegriffe) > 249:
-                            content.suchbegriffe = ensure_length_with_ai(content.suchbegriffe, 249, "Keywords", client)
+                        if get_byte_length(content.suchbegriffe) > 250:
+                            content.suchbegriffe = ensure_length_with_ai(content.suchbegriffe, 250, "Keywords", client)
                             
                         generated_contents.append((content, detected_type, product_data, required_attributes))
                         
@@ -1126,24 +1268,24 @@ with tab4:
                             
                             content = CosmoOptimizedContent.model_validate_json(response.choices[0].message.content)
                             
-                            # Enforce hard limits with AI regeneration
-                            if len(content.artikelname) > 200:
+                            # Enforce hard limits with AI regeneration (BYTES, not chars!)
+                            if get_byte_length(content.artikelname) > 200:
                                 content.artikelname = ensure_length_with_ai(content.artikelname, 200, "Titel", client)
                                 
                             new_bullets = []
                             for i, bp in enumerate(content.bullet_points):
-                                if len(bp) > 250:
-                                    new_bp = ensure_length_with_ai(bp, 250, f"Bullet {i+1}", client)
+                                if get_byte_length(bp) > 200:  # MAX 200 BYTES für Bullet Points!
+                                    new_bp = ensure_length_with_ai(bp, 200, f"Bullet {i+1}", client)
                                     new_bullets.append(new_bp)
                                 else:
                                     new_bullets.append(bp)
                             content.bullet_points = new_bullets
                             
-                            if len(content.produktbeschreibung) > 2000:
+                            if get_byte_length(content.produktbeschreibung) > 2000:
                                 content.produktbeschreibung = ensure_length_with_ai(content.produktbeschreibung, 2000, "Beschreibung", client)
                                 
-                            if len(content.suchbegriffe) > 249:
-                                content.suchbegriffe = ensure_length_with_ai(content.suchbegriffe, 249, "Keywords", client)
+                            if get_byte_length(content.suchbegriffe) > 250:
+                                content.suchbegriffe = ensure_length_with_ai(content.suchbegriffe, 250, "Keywords", client)
                             
                             # Store result
                             result_row = {
