@@ -8,9 +8,9 @@ import pandas as pd
 import openpyxl
 from openai import OpenAI
 import io
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Annotated
 import logging
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 import tempfile
 import os
 import re
@@ -24,24 +24,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Pydantic Models - with max_length constraints to help model generate appropriate lengths
-# Note: max_length is in characters, not bytes. Using ~150 chars for 200 byte limit (accounting for German umlauts = 2 bytes)
+# Pydantic Models - max_length in characters (UTF-8 umlauts = 2 bytes, so ~180 chars ≈ 200 bytes)
+BulletPoint = Annotated[str, StringConstraints(max_length=180)]
+
 class ProductContent(BaseModel):
     """AI-generated Amazon listing content"""
-    model_config = {"extra": "forbid"}  # Required for Responses API
+    model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(max_length=160, description="Produkttitel: MAX 160 ZEICHEN (~200 Bytes). Marke + Produkt + USP")
-    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte: Je MAX 160 ZEICHEN (~200 Bytes)")
-    suchbegriffe: str = Field(max_length=200, description="Keywords: MAX 200 ZEICHEN (~250 Bytes). Synonyme, Long-Tail")
+    artikelname: str = Field(max_length=180, description="Produkttitel: MAX 180 Zeichen")
+    bullet_points: List[BulletPoint] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte")
+    suchbegriffe: str = Field(max_length=220, description="Keywords: MAX 220 Zeichen")
 
 class CosmoOptimizedContent(BaseModel):
     """COSMO/RUFUS optimized Amazon listing content"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(max_length=160, description="Produkttitel: MAX 160 ZEICHEN (~200 Bytes). Marke + Produkt + USP")
-    produktbeschreibung: str = Field(max_length=1600, description="Produktbeschreibung: MAX 1600 ZEICHEN (~2000 Bytes)")
-    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte: Je MAX 160 ZEICHEN (~200 Bytes)")
-    suchbegriffe: str = Field(max_length=200, description="Keywords: MAX 200 ZEICHEN (~250 Bytes). Synonyme, Long-Tail")
+    artikelname: str = Field(max_length=180, description="Produkttitel: MAX 180 Zeichen")
+    produktbeschreibung: str = Field(max_length=1800, description="Produktbeschreibung: MAX 1800 Zeichen")
+    bullet_points: List[BulletPoint] = Field(min_length=5, max_length=5, description="5 Aufzählungspunkte")
+    suchbegriffe: str = Field(max_length=220, description="Keywords: MAX 220 Zeichen")
 
 # Default Prompt
 DEFAULT_PROMPT = """Erstelle einen optimierten Amazon-Listing für folgendes Produkt:
@@ -105,18 +106,31 @@ HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
 - KEINE komplementären Produkte (FALSCH: "passend zu Rucksack")
 - KEINE Begriffe die bereits im Titel oder Bullets stehen!
 
-🚫 VERBOTEN IM OUTPUT (NUR natürliche Kundensprache!):
-- Schreibe NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
+🚫 VERBOTEN IM OUTPUT:
+- NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
 - KEINE Verweise auf COSMO, RUFUS oder "Beziehungstypen"
 
-✍️ STILISTISCHE REGELN (sauberes Deutsch!):
-- KEINE Pleonasmen/Redundanzen (FALSCH: "dichter Dichtung", "runder Kreis", "neuer Neuheit")
-- KEINE Wortwiederholungen im selben Satz
-- Präzise Formulierungen statt Füllwörter
-- Natürlicher Lesefluss, keine holprigen Konstruktionen
-- Variiere Satzanfänge und Struktur
+✍️ STILISTISCHE REGELN - SCHREIBE WIE EIN MENSCH, NICHT WIE GPT:
+- KEINE künstlichen Wortkombinationen wie "saug- und gluckfreies Trinken", "kein Gluckern oder Verschlucken"
+- KEINE übertriebenen Adjektivketten ("hochwertig, langlebig, robust, stabil")
+- KEINE Marketing-Floskeln ("perfekt für", "ideal für jeden", "unverzichtbar")
+- KEINE erfundenen Vorteile die nicht in den Produktdaten stehen
+- Schreibe SACHLICH und DIREKT wie ein Produktdatenblatt
+- Einfache, klare Sätze - keine verschachtelten Konstruktionen
+- KONKRETE Fakten statt vage Beschreibungen
+- Wenn du etwas nicht weißt, lass es weg - ERFINDE NICHTS
 
-WICHTIG: Nutze den Platz maximal aus! Hebe BESONDERE Eigenschaften hervor! Aber ERFINDE NICHTS - nur relevante, korrekte Inhalte."""
+BEISPIELE FÜR GUTEN VS. SCHLECHTEN STIL:
+❌ SCHLECHT: "Weite Trinköffnung für saug- und gluckfreies Trinken ohne Kleckern"
+✅ GUT: "Weite Öffnung zum einfachen Befüllen und Reinigen"
+
+❌ SCHLECHT: "Gesund & geruchsneutral - nimmt keine Gerüche oder Verfärbungen an"
+✅ GUT: "Tritan-Kunststoff, BPA-frei, spülmaschinenfest"
+
+❌ SCHLECHT: "Der perfekte Begleiter für jeden Tag"
+✅ GUT: "Für Schule, Sport und Freizeit"
+
+WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS!"""
 
 # COSMO Prompt
 COSMO_PROMPT = """Erstelle ein vollständig COSMO & RUFUS optimiertes Amazon-Listing für folgendes Produkt.
@@ -183,18 +197,31 @@ HINWEIS: ä, ö, ü, ß = je 2 Bytes! Plane entsprechend.
 - KEINE komplementären Produkte (FALSCH: "passend zu Rucksack")
 - KEINE Begriffe die bereits im Titel oder Bullets stehen!
 
-🚫 VERBOTEN IM OUTPUT (NUR natürliche Kundensprache!):
-- Schreibe NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
+🚫 VERBOTEN IM OUTPUT:
+- NIEMALS "is", "has_property", "used_for", "enables_activity" etc. im Text!
 - KEINE Verweise auf COSMO, RUFUS oder "Beziehungstypen"
 
-✍️ STILISTISCHE REGELN (sauberes Deutsch!):
-- KEINE Pleonasmen/Redundanzen (FALSCH: "dichter Dichtung", "runder Kreis", "neuer Neuheit")
-- KEINE Wortwiederholungen im selben Satz
-- Präzise Formulierungen statt Füllwörter
-- Natürlicher Lesefluss, keine holprigen Konstruktionen
-- Variiere Satzanfänge und Struktur
+✍️ STILISTISCHE REGELN - SCHREIBE WIE EIN MENSCH, NICHT WIE GPT:
+- KEINE künstlichen Wortkombinationen wie "saug- und gluckfreies Trinken", "kein Gluckern oder Verschlucken"
+- KEINE übertriebenen Adjektivketten ("hochwertig, langlebig, robust, stabil")
+- KEINE Marketing-Floskeln ("perfekt für", "ideal für jeden", "unverzichtbar")
+- KEINE erfundenen Vorteile die nicht in den Produktdaten stehen
+- Schreibe SACHLICH und DIREKT wie ein Produktdatenblatt
+- Einfache, klare Sätze - keine verschachtelten Konstruktionen
+- KONKRETE Fakten statt vage Beschreibungen
+- Wenn du etwas nicht weißt, lass es weg - ERFINDE NICHTS
 
-WICHTIG: Nutze den Platz MAXIMAL! Hebe BESONDERE Eigenschaften hervor! Aber ERFINDE NICHTS - nur relevante, korrekte Inhalte.
+BEISPIELE FÜR GUTEN VS. SCHLECHTEN STIL:
+❌ SCHLECHT: "Weite Trinköffnung für saug- und gluckfreies Trinken ohne Kleckern"
+✅ GUT: "Weite Öffnung zum einfachen Befüllen und Reinigen"
+
+❌ SCHLECHT: "Gesund & geruchsneutral - nimmt keine Gerüche oder Verfärbungen an"
+✅ GUT: "Tritan-Kunststoff, BPA-frei, spülmaschinenfest"
+
+❌ SCHLECHT: "Der perfekte Begleiter für jeden Tag"
+✅ GUT: "Für Schule, Sport und Freizeit"
+
+WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS!
 """
 
 # Page Config
