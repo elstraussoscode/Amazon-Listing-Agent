@@ -28,7 +28,7 @@ class CosmoOptimizedContent(BaseModel):
     artikelname: str = Field(description="Produkttitel, 150-175 Zeichen, KEINE Sätze, KEINE Punkte! Nur Keywords mit Kommata!")
     produktbeschreibung: str = Field(description="Produktbeschreibung, 1500-1750 Zeichen!")
     bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 VOLLSTÄNDIGE Sätze, je 150-175 Zeichen!")
-    suchbegriffe: str = Field(description="Suchbegriffe, 180-220 Zeichen!")
+    suchbegriffe: str = Field(description="Komma-getrennte Keywords die NICHT im Titel/Bullets stehen, 180-220 Zeichen!")
 
 # COSMO Prompt
 COSMO_PROMPT = """Erstelle ein vollständig COSMO & RUFUS optimiertes Amazon-Listing für folgendes Produkt.
@@ -39,6 +39,7 @@ Produktdaten:
 {{poe_data}}
 
 🔤 AUSGABESPRACHE: {{language}}
+⚠️ WICHTIG: Schreibe den GESAMTEN Output (Titel, Bullets, Beschreibung, Keywords) in dieser Sprache!
 
 🎯 DENKE WIE EIN KUNDE! Was will der Käufer WIRKLICH wissen?
 
@@ -118,14 +119,26 @@ WICHTIG: Nutze die verfügbare Länge MAXIMAL aus!
 Ein kurzer Titel verschenkt SEO-Potenzial!
 Umlaute (ä,ö,ü,ß) zählen als 2 Bytes.
 
-🔑 KEYWORDS/SUCHBEGRIFFE - STRATEGIE (MINIMUM 200 BYTES!):
-- Synonyme für Produktbezeichnung (z.B. "Vorratsdosen" → "Frischhaltedosen, Aufbewahrungsbehälter")
-- Wichtige Kundeneigenschaften (z.B. "luftdicht", "stapelbar", "mottensicher")
-- Long-Tail-Keywords aus Kundensicht (z.B. "Dosen für Mehl", "Behälter Küche")
-- Relevante Anwendungsfälle (z.B. "Speisekammer", "Küchenschrank")
-- KEINE komplementären Produkte!
-- KEINE Begriffe die bereits im Titel oder Bullets stehen!
-- Wenn POE-Daten vorhanden: Nutze die Top-Suchbegriffe als Inspiration!
+🔑 KEYWORDS/SUCHBEGRIFFE - BACKEND SEARCH TERMS (210-249 BYTES!):
+FORMAT: Komma-getrennte Liste von Keywords
+BEISPIEL: "parmesan reibe, käsehobel, reibemaschine, küchengerät manuell, hartkäse raspel"
+
+WICHTIG - NUR KEYWORDS DIE NICHT IM TEXT STEHEN:
+- KEINE Begriffe die bereits im Titel oder Bullets vorkommen!
+- Amazon indexiert den sichtbaren Text automatisch
+- Backend-Keywords sind für ZUSÄTZLICHE Suchbegriffe!
+
+WAS GEHÖRT REIN:
+- Synonyme (z.B. "Käsereibe" im Titel → "Käsehobel, Reibemaschine" in Keywords)
+- Schreibvarianten (z.B. "Kaesereibe" ohne Umlaut)
+- Long-Tail-Keywords (z.B. "manuell ohne strom", "küchenhelfer hand")
+- Relevante Anwendungsfälle die NICHT im Text stehen
+- Wenn POE-Daten vorhanden: Nutze Top-Suchbegriffe als Inspiration!
+
+WAS GEHÖRT NICHT REIN:
+- Begriffe die schon im Titel/Bullets stehen (Verschwendung!)
+- Komplementäre Produkte
+- Marken von Wettbewerbern
 
 🚫 VERBOTEN IM OUTPUT:
 - NIEMALS "is", "has_property", "used_for" etc. im Text!
@@ -491,13 +504,14 @@ NUTZE diese Suchbegriffe als Inspiration für:
                     prompt = st.session_state.cosmo_prompt_template
                     prompt = prompt.replace("{{product_data}}", product_data_str)
                     prompt = prompt.replace("{{poe_data}}", poe_data_str)
-                    prompt = prompt.replace("{{language}}", language_options[selected_language])
+                    lang_instruction = language_options[selected_language]
+                    prompt = prompt.replace("{{language}}", lang_instruction)
                     
                     try:
                         response = client.chat.completions.create(
                             model="gpt-5.1",
                             messages=[
-                                {"role": "system", "content": "Du bist ein Amazon SEO-Experte spezialisiert auf COSMO & RUFUS. Schreibe VOLLSTÄNDIGE Sätze, niemals mitten im Satz abbrechen!"},
+                                {"role": "system", "content": f"Amazon SEO-Experte für COSMO & RUFUS. OUTPUT LANGUAGE: {lang_instruction}. Schreibe VOLLSTÄNDIGE Sätze!"},
                                 {"role": "user", "content": prompt}
                             ],
                             response_format={
