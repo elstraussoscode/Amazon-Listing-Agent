@@ -27,7 +27,7 @@ class CosmoOptimizedContent(BaseModel):
     
     artikelname: str = Field(description="Produkttitel, 150-175 Zeichen, KEINE Sätze, KEINE Punkte! Nur Keywords mit Kommata!")
     produktbeschreibung: str = Field(description="Produktbeschreibung, 1500-1750 Zeichen!")
-    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 VOLLSTÄNDIGE Sätze, je 150-175 Zeichen!")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 VOLLSTÄNDIGE Sätze, je 150-175 Zeichen! Hauptkeywords in CAPS!")
     suchbegriffe: str = Field(description="Komma-getrennte Keywords die NICHT im Titel/Bullets stehen, 180-220 Zeichen!")
 
 # COSMO Prompt
@@ -39,7 +39,17 @@ Produktdaten:
 {{poe_data}}
 
 🔤 AUSGABESPRACHE: {{language}}
-⚠️ WICHTIG: Schreibe den GESAMTEN Output (Titel, Bullets, Beschreibung, Keywords) in dieser Sprache!
+⚠️ KRITISCH - SPRACHE FÜR ALLE FELDER:
+- TITEL: In der gewählten Sprache!
+- BULLET POINTS: In der gewählten Sprache!
+- BESCHREIBUNG: In der gewählten Sprache!
+- KEYWORDS: In der gewählten Sprache!
+
+ÜBERSETZE ALLE BEGRIFFE in die Zielsprache:
+- "BPA-frei" → EN: "BPA free", FR: "sans BPA", IT: "senza BPA", ES: "libre de BPA"
+- "Edelstahl" → EN: "stainless steel", FR: "acier inoxydable", IT: "acciaio inox"
+- "spülmaschinenfest" → EN: "dishwasher safe", FR: "lave-vaisselle", IT: "lavastoviglie"
+- Übersetze ALLE deutschen Produkteigenschaften korrekt!
 
 🎯 DENKE WIE EIN KUNDE! Was will der Käufer WIRKLICH wissen?
 
@@ -98,6 +108,12 @@ TITEL-BEISPIEL:
 📌 BULLET POINTS - VOLLSTÄNDIGE SÄTZE:
 Jeder Bullet Point MUSS ein vollständiger, abgeschlossener Satz sein!
 NIEMALS mitten im Satz abbrechen!
+
+CAPS-REGEL FÜR BULLET POINTS (ALLE SPRACHEN):
+- Schreibe Hauptkeywords und USPs in GROSSBUCHSTABEN
+- Beispiel DE: "Die SPÜLMASCHINENGEEIGNETE Käsereibe aus EDELSTAHL reibt PARMESAN mühelos."
+- Beispiel EN: "The DISHWASHER-SAFE cheese grater made of STAINLESS STEEL grates PARMESAN effortlessly."
+- Maximal 2-3 Wörter pro Bullet in CAPS (nicht übertreiben!)
 
 1. HAUPTVORTEIL: Der größte Nutzen für den Kunden
 2. MATERIAL/QUALITÄT: Material und warum es gut ist
