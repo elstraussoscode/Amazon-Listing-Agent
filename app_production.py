@@ -10,6 +10,8 @@ import io
 from typing import List
 import logging
 from pydantic import BaseModel, Field
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -18,32 +20,37 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Pydantic Model for structured output
+# Pydantic Models for structured output - 2 SEPARATE CALLS!
 # NO max_length constraints - let ensure_optimal_length_with_ai handle length enforcement
-# This prevents Pydantic from truncating text mid-sentence!
-class CosmoOptimizedContent(BaseModel):
-    """COSMO/RUFUS optimized Amazon listing content"""
+
+# CALL 1: Hauptinhalt (Titel, Beschreibung, Bullets)
+class MainContent(BaseModel):
+    """Hauptinhalt des Amazon-Listings: Titel, Beschreibung, Bullets"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(description="Produkttitel, 150-175 Zeichen, KEINE Sätze, KEINE Punkte! Nur Keywords mit Kommata!")
+    artikelname: str = Field(description="Produkttitel 150-175 Zeichen. Format: MARKE Produkt Farbe, Eigenschaften. 100% nicht 100 Prozent!")
     produktbeschreibung: str = Field(description="Produktbeschreibung, 1500-1750 Zeichen!")
-    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 VOLLSTÄNDIGE Sätze, je 150-175 Zeichen! Hauptkeywords in CAPS!")
-    suchbegriffe: str = Field(description="Komma-getrennte Keywords die NICHT im Titel/Bullets stehen, 180-220 Zeichen!")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Bullets im Format 'HOOK: Beschreibung.' NUR Hook in CAPS!")
 
-# COSMO Prompt
-COSMO_PROMPT = """Erstelle ein vollständig COSMO & RUFUS optimiertes Amazon-Listing für folgendes Produkt.
+# CALL 2: Keywords (bekommt Titel, Beschreibung, Bullets als Kontext)
+class KeywordContent(BaseModel):
+    """Backend-Keywords für Amazon - komma-getrennte Liste"""
+    model_config = {"extra": "forbid"}
+    
+    suchbegriffe: str = Field(description="NUR komma-getrennte Keywords! KEINE Sätze! Bsp: 'keyword1, keyword2, keyword3'")
+
+# CALL 1 PROMPT: Hauptinhalt (Titel, Beschreibung, Bullets) - OHNE Keywords!
+MAIN_CONTENT_PROMPT = """Erstelle Titel, Beschreibung und Bullet Points für folgendes Amazon-Produkt.
+WICHTIG: Erstelle KEINE Keywords - diese werden separat generiert!
 
 Produktdaten:
 {{product_data}}
-
-{{poe_data}}
 
 🔤 AUSGABESPRACHE: {{language}}
 ⚠️ KRITISCH - SPRACHE FÜR ALLE FELDER:
 - TITEL: In der gewählten Sprache!
 - BULLET POINTS: In der gewählten Sprache!
 - BESCHREIBUNG: In der gewählten Sprache!
-- KEYWORDS: In der gewählten Sprache!
 
 ÜBERSETZE ALLE BEGRIFFE in die Zielsprache:
 - "BPA-frei" → EN: "BPA free", FR: "sans BPA", IT: "senza BPA", ES: "libre de BPA"
@@ -101,25 +108,47 @@ REGELN FÜR TITEL:
 - Größe/Maße MUSS enthalten sein wenn bekannt
 - Am Ende: Synonym für Produktgattung
 
+SPEZIELLE TITEL-REGELN:
+- Prozent als Symbol: "100%" NICHT "100 Prozent"
+- Farbe DIREKT nach Produktname, OHNE "Farbe" davor!
+  ❌ FALSCH: "black+blum Lunch Bag Lunchtasche, Farbe blau Schiefer"
+  ✅ RICHTIG: "black+blum Lunch Bag Schiefer, Lunchtasche mit Trageschlaufe"
+- Bei Farbvarianten: Farbe kommt direkt nach Produktbezeichnung!
+  ✅ RICHTIG: "ALADDIN Aveo Trinkflasche Blau 0,6L, auslaufsicher, BPA-frei"
+  ❌ FALSCH: "ALADDIN Aveo Trinkflasche 0,6L auslaufsicher BPA-frei Farbe Blau"
+
 TITEL-BEISPIEL:
 ✅ GUT: "KÜCHENPROFI Käsereibe mit Kurbel und Trommel, 18/10 Edelstahl, 20 cm, für Parmesan und Hartkäse, spülmaschinenfest, Trommelreibe"
 ❌ SCHLECHT: "KÜCHENPROFI Käsereibe mit Kurbel. Die robuste Reibe ist langlebig." (= Satz mit Punkt!)
 
-📌 BULLET POINTS - VOLLSTÄNDIGE SÄTZE:
-Jeder Bullet Point MUSS ein vollständiger, abgeschlossener Satz sein!
-NIEMALS mitten im Satz abbrechen!
+📌 BULLET POINTS - EXAKTES FORMAT:
 
-CAPS-REGEL FÜR BULLET POINTS (ALLE SPRACHEN):
-- Schreibe Hauptkeywords und USPs in GROSSBUCHSTABEN
-- Beispiel DE: "Die SPÜLMASCHINENGEEIGNETE Käsereibe aus EDELSTAHL reibt PARMESAN mühelos."
-- Beispiel EN: "The DISHWASHER-SAFE cheese grater made of STAINLESS STEEL grates PARMESAN effortlessly."
-- Maximal 2-3 Wörter pro Bullet in CAPS (nicht übertreiben!)
+⚠️ KRITISCH - JEDER BULLET MUSS DIESES FORMAT HABEN:
+HOOK IN CAPS: Beschreibender Text in normaler Schreibweise.
 
+BEISPIELE KORREKTES FORMAT:
+✅ "2-IN-1-FUNKTION: Die Scizza kombiniert scharfe Edelstahlklingen mit einem integrierten Servierheber."
+✅ "AUSLAUFSICHER: Der Schraubverschluss dichtet zu 100% ab und hält Getränke sicher in der Tasche."
+✅ "EXTRA WEITE ÖFFNUNG: Die Öffnung erleichtert das Packen und Entnehmen von Dosen und Flaschen."
+
+BEISPIELE FALSCHES FORMAT:
+❌ "VIELSEITIGES MATERIAL: Die BOXEN aus EDELSTAHL sind robust." (BOXEN/EDELSTAHL dürfen NICHT caps sein!)
+❌ "Die weite Öffnung erleichtert das Packen von Dosen." (KEINE Hook!)
+❌ "IDEAL FÜR UNTERWEGS: PERFEKT für SCHULE und SPORT." (Zu viele CAPS im Text!)
+
+REGELN:
+1. JEDER Bullet beginnt mit einem HOOK in GROSSBUCHSTABEN (2-4 Wörter)
+2. Nach dem Hook kommt ein DOPPELPUNKT
+3. Dann folgt der beschreibende Text in NORMALER Schreibweise
+4. Im beschreibenden Text KEINE weiteren CAPS-Wörter!
+5. Vollständige Sätze, NIEMALS abbrechen!
+
+DIE 5 BULLETS MÜSSEN ABDECKEN:
 1. HAUPTVORTEIL: Der größte Nutzen für den Kunden
 2. MATERIAL/QUALITÄT: Material und warum es gut ist
 3. ANWENDUNG: Wo und wie wird es benutzt
 4. BESONDERHEIT: Was unterscheidet es von anderen Produkten
-5. LIEFERUMFANG: Was ist enthalten
+5. LIEFERUMFANG/DETAILS: Was ist enthalten, technische Details
 
 📌 PRODUKTBESCHREIBUNG (1500-1700 ZEICHEN):
 Ausführliche Beschreibung die ALLE 15 Beziehungstypen inhaltlich abdeckt.
@@ -129,32 +158,10 @@ KEINE technischen Begriffe wie "is", "has_property" etc. verwenden!
 - Titel: 150-175 ZEICHEN (Amazon max: 200) → NUTZE VOLL AUS!
 - Bullet Points: Je 150-175 ZEICHEN (Amazon max: 200) → NUTZE VOLL AUS!
 - Beschreibung: 1500-1750 ZEICHEN (Amazon max: 2000)
-- Keywords: 180-220 ZEICHEN (Amazon max: 249 Bytes)
 
 WICHTIG: Nutze die verfügbare Länge MAXIMAL aus! 
 Ein kurzer Titel verschenkt SEO-Potenzial!
 Umlaute (ä,ö,ü,ß) zählen als 2 Bytes.
-
-🔑 KEYWORDS/SUCHBEGRIFFE - BACKEND SEARCH TERMS (210-249 BYTES!):
-FORMAT: Komma-getrennte Liste von Keywords
-BEISPIEL: "parmesan reibe, käsehobel, reibemaschine, küchengerät manuell, hartkäse raspel"
-
-WICHTIG - NUR KEYWORDS DIE NICHT IM TEXT STEHEN:
-- KEINE Begriffe die bereits im Titel oder Bullets vorkommen!
-- Amazon indexiert den sichtbaren Text automatisch
-- Backend-Keywords sind für ZUSÄTZLICHE Suchbegriffe!
-
-WAS GEHÖRT REIN:
-- Synonyme (z.B. "Käsereibe" im Titel → "Käsehobel, Reibemaschine" in Keywords)
-- Schreibvarianten (z.B. "Kaesereibe" ohne Umlaut)
-- Long-Tail-Keywords (z.B. "manuell ohne strom", "küchenhelfer hand")
-- Relevante Anwendungsfälle die NICHT im Text stehen
-- Wenn POE-Daten vorhanden: Nutze Top-Suchbegriffe als Inspiration!
-
-WAS GEHÖRT NICHT REIN:
-- Begriffe die schon im Titel/Bullets stehen (Verschwendung!)
-- Komplementäre Produkte
-- Marken von Wettbewerbern
 
 🚫 VERBOTEN IM OUTPUT:
 - NIEMALS "is", "has_property", "used_for" etc. im Text!
@@ -178,6 +185,67 @@ NICHT: "KÜCHENPROFI Käsereibe Kurbel Trommel 18 10 Edelstahl 20 cm Parmesan Ha
 WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS!
 """
 
+# CALL 2 PROMPT: Keywords - SEPARATER FOKUSSIERTER CALL
+KEYWORD_PROMPT = """Erstelle Backend-Suchbegriffe (Keywords) für dieses Amazon-Produkt.
+
+🔤 AUSGABESPRACHE: {{language}}
+
+📊 BEREITS ERSTELLTER INHALT (DIESE BEGRIFFE NICHT WIEDERHOLEN!):
+---
+TITEL: {{title}}
+---
+BULLET 1: {{bullet1}}
+BULLET 2: {{bullet2}}
+BULLET 3: {{bullet3}}
+BULLET 4: {{bullet4}}
+BULLET 5: {{bullet5}}
+---
+BESCHREIBUNG: {{description}}
+---
+
+{{poe_data}}
+
+🔑 DEINE AUFGABE: BACKEND-KEYWORDS ERSTELLEN (210-249 BYTES)
+
+⚠️ KRITISCHES FORMAT - NUR SO:
+✅ RICHTIG: "keyword1, keyword2, keyword3, keyword4, keyword5"
+❌ FALSCH: "Das Produkt ist ideal für die Küche. Es eignet sich perfekt für..."
+
+BEISPIELE KORREKTES FORMAT:
+✅ "käsehobel, reibemaschine, parmesan raspel, küchengerät hand, hartkäse reibe, kaesereibe, parmesanreibe"
+✅ "lunch box isoliert, brotdose erwachsene, meal prep box, essen transport, lunchbag, vesperbox"
+✅ "water bottle kids, drinking flask, sports bottle, gym water bottle, leak proof bottle"
+
+BEISPIELE FALSCHES FORMAT:
+❌ "Die Käsereibe ist ideal für Parmesan. Robustes Material für die Küche."
+❌ "Manuelle Zitronenpresse aus robustem Material. Ideal als Citronpresse für Bar und Küche."
+❌ "Black+Blum Lunchtasche Schiefer, isolierende Roll-up Lunchbag aus recyceltem PET."
+
+STRENGE REGELN:
+1. NUR einzelne Wörter oder 2-3 Wort-Kombinationen!
+2. Getrennt durch KOMMAS!
+3. KEINE ganzen Sätze!
+4. KEINE Punkte!
+5. KEINE Beschreibungen!
+6. Alles kleingeschrieben (außer Markennamen)!
+7. KEINE Begriffe die bereits im Titel, Bullets oder Beschreibung stehen!
+
+WAS GEHÖRT REIN:
+- Synonyme für Begriffe im Titel (z.B. "Trinkflasche" → "wasserflasche, flasche, bottle")
+- Schreibvarianten ohne Umlaut (z.B. "käsereibe" → "kaesereibe")
+- Long-Tail-Keywords (z.B. "manuell ohne strom", "küchenhelfer hand")
+- Relevante Anwendungsfälle als einzelne Keywords
+- POE-Suchbegriffe die NICHT im Text stehen
+
+WAS GEHÖRT NICHT REIN:
+- Begriffe die schon im Titel/Bullets/Beschreibung stehen!
+- Ganze Sätze oder Beschreibungen!
+- Komplementäre Produkte
+- Wettbewerber-Marken
+
+ZIEL: 210-249 BYTES komma-getrennte Keywords
+"""
+
 # Page Config
 st.set_page_config(
     page_title="Amazon Content Optimizer",
@@ -188,8 +256,10 @@ st.set_page_config(
 # Initialize Session State
 if 'api_key' not in st.session_state:
     st.session_state.api_key = ""
-if 'cosmo_prompt_template' not in st.session_state:
-    st.session_state.cosmo_prompt_template = COSMO_PROMPT
+if 'main_content_prompt' not in st.session_state:
+    st.session_state.main_content_prompt = MAIN_CONTENT_PROMPT
+if 'keyword_prompt' not in st.session_state:
+    st.session_state.keyword_prompt = KEYWORD_PROMPT
 
 # Title
 st.title("✍️ Amazon Content Optimizer")
@@ -216,15 +286,25 @@ with st.sidebar:
     else:
         st.error("❌ API Key fehlt")
     
-    with st.expander("✏️ Prompt bearbeiten"):
-        cosmo_prompt = st.text_area(
-            "COSMO Prompt",
-            value=st.session_state.cosmo_prompt_template,
-            height=300
+    with st.expander("✏️ Prompts bearbeiten"):
+        st.caption("**Call 1:** Titel, Beschreibung, Bullets")
+        main_prompt = st.text_area(
+            "Hauptinhalt-Prompt",
+            value=st.session_state.main_content_prompt,
+            height=200,
+            key="main_prompt_edit"
         )
-        if st.button("💾 Prompt speichern"):
-            st.session_state.cosmo_prompt_template = cosmo_prompt
-            st.success("✅ Prompt gespeichert!")
+        st.caption("**Call 2:** Keywords (bekommt Output von Call 1)")
+        kw_prompt = st.text_area(
+            "Keyword-Prompt",
+            value=st.session_state.keyword_prompt,
+            height=200,
+            key="kw_prompt_edit"
+        )
+        if st.button("💾 Prompts speichern"):
+            st.session_state.main_content_prompt = main_prompt
+            st.session_state.keyword_prompt = kw_prompt
+            st.success("✅ Prompts gespeichert!")
 
 # Helper functions
 def get_byte_length(text: str) -> int:
@@ -489,121 +569,192 @@ if opt_file:
         
         num_products_opt = st.slider("Anzahl Produkte", 1, len(df_opt), min(5, len(df_opt)), key="opt_slider")
         
+        # Parallelization slider
+        parallel_workers = st.slider("Parallele Verarbeitung", 1, 5, 3, key="parallel_slider", 
+                                     help="Anzahl der Produkte die gleichzeitig verarbeitet werden")
+        
         if st.button("🚀 Optimierung Starten", type="primary", key="opt_start", use_container_width=True):
             if not st.session_state.get('api_key', '').strip():
                 st.error("❌ Bitte API Key in der Seitenleiste eingeben")
             else:
                 results = []
+                results_lock = threading.Lock()
                 progress_bar = st.progress(0)
                 status = st.empty()
+                completed_count = [0]  # Mutable for thread access
                 
                 client = OpenAI(api_key=st.session_state.api_key)
                 
-                for idx in range(num_products_opt):
-                    status.text(f"✍️ Optimiere Produkt {idx + 1}/{num_products_opt}...")
-                    row = df_opt.iloc[idx]
-                    
+                # Store prompts locally for thread safety
+                main_prompt_template = st.session_state.main_content_prompt
+                keyword_prompt_template = st.session_state.keyword_prompt
+                lang_instruction = language_options[selected_language]
+                
+                def process_product(idx, row, id_col_name, title_col_name, poe_kws):
+                    """Process a single product with Call 1 → Call 2 sequentially"""
                     product_data_str = "\n".join([f"- {k}: {v}" for k, v in row.to_dict().items() if pd.notna(v)])
                     
-                    poe_data_str = ""
-                    if poe_keywords:
-                        poe_data_str = f"""
-📊 POE-DATEN (Top-Suchbegriffe mit hohem Suchvolumen):
-{', '.join(poe_keywords[:15])}
-
-NUTZE diese Suchbegriffe als Inspiration für:
-- Keywords die NICHT im Titel/Bullets stehen
-- Long-Tail Varianten
-- Synonyme und verwandte Begriffe
-"""
-                    
-                    prompt = st.session_state.cosmo_prompt_template
-                    prompt = prompt.replace("{{product_data}}", product_data_str)
-                    prompt = prompt.replace("{{poe_data}}", poe_data_str)
-                    lang_instruction = language_options[selected_language]
-                    prompt = prompt.replace("{{language}}", lang_instruction)
-                    
                     try:
-                        response = client.chat.completions.create(
+                        # ========================================
+                        # CALL 1: Hauptinhalt (Titel, Beschreibung, Bullets)
+                        # ========================================
+                        logger.info(f"Produkt {idx + 1}: Call 1 - Hauptinhalt...")
+                        
+                        main_prompt = main_prompt_template
+                        main_prompt = main_prompt.replace("{{product_data}}", product_data_str)
+                        main_prompt = main_prompt.replace("{{language}}", lang_instruction)
+                        
+                        response1 = client.chat.completions.create(
                             model="gpt-5.1",
                             messages=[
-                                {"role": "system", "content": f"Amazon SEO-Experte für COSMO & RUFUS. OUTPUT LANGUAGE: {lang_instruction}. Schreibe VOLLSTÄNDIGE Sätze!"},
-                                {"role": "user", "content": prompt}
+                                {"role": "system", "content": f"Amazon SEO-Experte. OUTPUT LANGUAGE: {lang_instruction}. Schreibe VOLLSTÄNDIGE Sätze! Fokus: Titel, Bullets, Beschreibung."},
+                                {"role": "user", "content": main_prompt}
                             ],
                             response_format={
                                 "type": "json_schema",
                                 "json_schema": {
-                                    "name": "cosmo_content",
-                                    "schema": CosmoOptimizedContent.model_json_schema(),
+                                    "name": "main_content",
+                                    "schema": MainContent.model_json_schema(),
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=4000  # Enough for full content generation
+                            max_completion_tokens=4000
                         )
                         
-                        content = CosmoOptimizedContent.model_validate_json(response.choices[0].message.content)
+                        main_content = MainContent.model_validate_json(response1.choices[0].message.content)
                         
-                        # Amazon Limits (85-90% ausnutzen!):
-                        # - Title: 200 chars max → Ziel: 170-190 chars (~185-210 bytes für DE)
-                        # - Bullets: 255 chars max (empf. 200) → Ziel: 170-190 chars
-                        # - Description: 2000 chars max → Ziel: 1700-1900 chars
-                        # - Keywords: 249 bytes max → Ziel: 210-245 bytes
-                        
-                        # TITEL: 170-200 Bytes (85-100% von 200 chars)
-                        titel_bytes = get_byte_length(content.artikelname)
+                        # Längenanpassung für Hauptinhalt
+                        titel_bytes = get_byte_length(main_content.artikelname)
                         if titel_bytes < 170 or titel_bytes > 200:
-                            content.artikelname = ensure_optimal_length_with_ai(
-                                content.artikelname, 170, 200, "Titel", client, product_data_str)
+                            main_content.artikelname = ensure_optimal_length_with_ai(
+                                main_content.artikelname, 170, 200, f"Titel P{idx+1}", client, product_data_str)
                         
-                        # BULLET POINTS: 170-200 Bytes each (85-100% von 200 chars)
                         new_bullets = []
-                        for i, bp in enumerate(content.bullet_points):
+                        for i, bp in enumerate(main_content.bullet_points):
                             bp_bytes = get_byte_length(bp)
                             if bp_bytes < 170 or bp_bytes > 200:
                                 bp = ensure_optimal_length_with_ai(
-                                    bp, 170, 200, f"Bullet {i+1}", client, product_data_str)
+                                    bp, 170, 200, f"Bullet {i+1} P{idx+1}", client, product_data_str)
                             new_bullets.append(bp)
-                        content.bullet_points = new_bullets
+                        main_content.bullet_points = new_bullets
                         
-                        # BESCHREIBUNG: 1700-2000 Bytes (85-100% von 2000 chars)
-                        desc_bytes = get_byte_length(content.produktbeschreibung)
+                        desc_bytes = get_byte_length(main_content.produktbeschreibung)
                         if desc_bytes < 1700 or desc_bytes > 2000:
-                            content.produktbeschreibung = ensure_optimal_length_with_ai(
-                                content.produktbeschreibung, 1700, 2000, "Beschreibung", client, product_data_str)
+                            main_content.produktbeschreibung = ensure_optimal_length_with_ai(
+                                main_content.produktbeschreibung, 1700, 2000, f"Beschreibung P{idx+1}", client, product_data_str)
                         
-                        # KEYWORDS: 210-249 Bytes (85-100% von 249 bytes)
-                        kw_bytes = get_byte_length(content.suchbegriffe)
+                        # ========================================
+                        # CALL 2: Keywords (bekommt Output von Call 1)
+                        # ========================================
+                        logger.info(f"Produkt {idx + 1}: Call 2 - Keywords...")
+                        
+                        poe_data_str = ""
+                        if poe_kws:
+                            poe_data_str = f"""
+📊 POE-DATEN (Top-Suchbegriffe - nutze als Inspiration):
+{', '.join(poe_kws[:15])}
+"""
+                        
+                        kw_prompt = keyword_prompt_template
+                        kw_prompt = kw_prompt.replace("{{language}}", lang_instruction)
+                        kw_prompt = kw_prompt.replace("{{title}}", main_content.artikelname)
+                        kw_prompt = kw_prompt.replace("{{bullet1}}", main_content.bullet_points[0] if len(main_content.bullet_points) > 0 else "")
+                        kw_prompt = kw_prompt.replace("{{bullet2}}", main_content.bullet_points[1] if len(main_content.bullet_points) > 1 else "")
+                        kw_prompt = kw_prompt.replace("{{bullet3}}", main_content.bullet_points[2] if len(main_content.bullet_points) > 2 else "")
+                        kw_prompt = kw_prompt.replace("{{bullet4}}", main_content.bullet_points[3] if len(main_content.bullet_points) > 3 else "")
+                        kw_prompt = kw_prompt.replace("{{bullet5}}", main_content.bullet_points[4] if len(main_content.bullet_points) > 4 else "")
+                        kw_prompt = kw_prompt.replace("{{description}}", main_content.produktbeschreibung)
+                        kw_prompt = kw_prompt.replace("{{poe_data}}", poe_data_str)
+                        
+                        response2 = client.chat.completions.create(
+                            model="gpt-5.1",
+                            messages=[
+                                {"role": "system", "content": f"Keyword-Spezialist. OUTPUT LANGUAGE: {lang_instruction}. NUR komma-getrennte Keywords! KEINE Sätze! KEINE Beschreibungen!"},
+                                {"role": "user", "content": kw_prompt}
+                            ],
+                            response_format={
+                                "type": "json_schema",
+                                "json_schema": {
+                                    "name": "keyword_content",
+                                    "schema": KeywordContent.model_json_schema(),
+                                    "strict": True
+                                }
+                            },
+                            max_completion_tokens=500
+                        )
+                        
+                        keyword_content = KeywordContent.model_validate_json(response2.choices[0].message.content)
+                        
+                        # Längenanpassung für Keywords
+                        kw_bytes = get_byte_length(keyword_content.suchbegriffe)
                         if kw_bytes < 210 or kw_bytes > 249:
-                            content.suchbegriffe = ensure_optimal_length_with_ai(
-                                content.suchbegriffe, 210, 249, "Keywords", client, product_data_str)
+                            keyword_content.suchbegriffe = ensure_optimal_length_with_ai(
+                                keyword_content.suchbegriffe, 210, 249, f"Keywords P{idx+1}", client, product_data_str)
                         
+                        # ========================================
+                        # Ergebnis zusammenführen
+                        # ========================================
                         result_row = {
-                            "Identifier": row[id_col],
-                            "Old Title": row[title_col] if title_col != "-" else "",
-                            "New Title": content.artikelname,
-                            "New Description": content.produktbeschreibung,
-                            "New Keyword": content.suchbegriffe
+                            "idx": idx,  # For sorting later
+                            "Identifier": row[id_col_name],
+                            "Old Title": row[title_col_name] if title_col_name != "-" else "",
+                            "New Title": main_content.artikelname,
+                            "New Description": main_content.produktbeschreibung,
+                            "New Keyword": keyword_content.suchbegriffe
                         }
-                        for i, bp in enumerate(content.bullet_points, 1):
+                        for i, bp in enumerate(main_content.bullet_points, 1):
                             result_row[f"New Bullet {i}"] = bp
                         
-                        results.append(result_row)
-                        
-                        with st.expander(f"✅ {row[id_col]}: {content.artikelname[:60]}..."):
-                            st.write("**Titel:**", content.artikelname)
-                            st.write(f"*({get_byte_length(content.artikelname)} bytes)*")
-                            st.write("**Bullets:**")
-                            for i, bp in enumerate(content.bullet_points, 1):
-                                st.write(f"• {bp} *({get_byte_length(bp)} bytes)*")
-                            st.write("**Keywords:**", content.suchbegriffe)
-                            st.write(f"*({get_byte_length(content.suchbegriffe)} bytes)*")
-                            st.caption("**Beschreibung:** " + content.produktbeschreibung[:100] + "...")
+                        logger.info(f"✅ Produkt {idx + 1} fertig!")
+                        return {"success": True, "data": result_row, "main_content": main_content, "keywords": keyword_content}
                     
                     except Exception as e:
-                        st.error(f"Fehler bei Produkt {idx}: {e}")
-                        logger.error(f"Error: {e}", exc_info=True)
+                        logger.error(f"Fehler bei Produkt {idx + 1}: {e}", exc_info=True)
+                        return {"success": False, "error": str(e), "idx": idx}
+                
+                # Process products in parallel
+                status.text(f"🚀 Starte parallele Verarbeitung ({parallel_workers} gleichzeitig)...")
+                
+                with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+                    futures = {}
+                    for idx in range(num_products_opt):
+                        row = df_opt.iloc[idx]
+                        future = executor.submit(process_product, idx, row, id_col, title_col, poe_keywords)
+                        futures[future] = idx
                     
-                    progress_bar.progress((idx + 1) / num_products_opt)
+                    for future in as_completed(futures):
+                        idx = futures[future]
+                        result = future.result()
+                        
+                        with results_lock:
+                            completed_count[0] += 1
+                            status.text(f"✅ {completed_count[0]}/{num_products_opt} Produkte fertig...")
+                            progress_bar.progress(completed_count[0] / num_products_opt)
+                        
+                        if result["success"]:
+                            with results_lock:
+                                results.append(result["data"])
+                            
+                            main_content = result["main_content"]
+                            keyword_content = result["keywords"]
+                            
+                            with st.expander(f"✅ Produkt {idx + 1}: {main_content.artikelname[:50]}..."):
+                                st.write("**Titel:**", main_content.artikelname)
+                                st.write(f"*({get_byte_length(main_content.artikelname)} bytes)*")
+                                st.write("**Bullets:**")
+                                for i, bp in enumerate(main_content.bullet_points, 1):
+                                    st.write(f"• {bp} *({get_byte_length(bp)} bytes)*")
+                                st.write("**Keywords:**", keyword_content.suchbegriffe)
+                                st.write(f"*({get_byte_length(keyword_content.suchbegriffe)} bytes)*")
+                                st.caption("**Beschreibung:** " + main_content.produktbeschreibung[:100] + "...")
+                        else:
+                            st.error(f"❌ Fehler bei Produkt {idx + 1}: {result['error']}")
+                
+                # Sort results by original index
+                results.sort(key=lambda x: x["idx"])
+                # Remove idx from final output
+                for r in results:
+                    del r["idx"]
                 
                 status.text("✅ Fertig!")
                 
