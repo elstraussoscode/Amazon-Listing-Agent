@@ -28,16 +28,16 @@ class MainContent(BaseModel):
     """Hauptinhalt des Amazon-Listings: Titel, Beschreibung, Bullets"""
     model_config = {"extra": "forbid"}
     
-    artikelname: str = Field(description="Produkttitel 150-175 Zeichen. Format: MARKE Produkt Farbe, Eigenschaften. 100% nicht 100 Prozent!")
-    produktbeschreibung: str = Field(description="Produktbeschreibung, 1500-1750 Zeichen!")
-    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Bullets im Format 'HOOK: Beschreibung.' NUR Hook in CAPS!")
+    artikelname: str = Field(description="Produkttitel 170-200 BYTES (~185 Bytes, ca. 30 Wörter). Format: MARKE Produkt Farbe, Eigenschaften. 100% nicht 100 Prozent!")
+    produktbeschreibung: str = Field(description="Produktbeschreibung 1700-2000 BYTES (~1850 Bytes, ca. 280 Wörter)!")
+    bullet_points: List[str] = Field(min_length=5, max_length=5, description="5 Bullets je 170-200 BYTES (~185 Bytes, ca. 30 Wörter). Format 'HOOK: Beschreibung.' NUR Hook in CAPS!")
 
 # CALL 2: Keywords (bekommt Titel, Beschreibung, Bullets als Kontext)
 class KeywordContent(BaseModel):
     """Backend-Keywords für Amazon - komma-getrennte Liste"""
     model_config = {"extra": "forbid"}
     
-    suchbegriffe: str = Field(description="NUR komma-getrennte Keywords! KEINE Sätze! Bsp: 'keyword1, keyword2, keyword3'")
+    suchbegriffe: str = Field(description="210-249 BYTES (~230 Bytes, ca. 15-20 Keywords). NUR komma-getrennte Keywords! KEINE Sätze!")
 
 # CALL 3: Verifikation (prüft und korrigiert nur bei Bedarf)
 class VerificationResult(BaseModel):
@@ -194,14 +194,21 @@ DIE 5 BULLETS MÜSSEN ABDECKEN:
 Ausführliche Beschreibung die ALLE 15 Beziehungstypen inhaltlich abdeckt.
 KEINE technischen Begriffe wie "is", "has_property" etc. verwenden!
 
-⚠️ AMAZON ZEICHEN-LIMITS (85-90% AUSNUTZEN!):
-- Titel: 150-175 ZEICHEN (Amazon max: 200) → NUTZE VOLL AUS!
-- Bullet Points: Je 150-175 ZEICHEN (Amazon max: 200) → NUTZE VOLL AUS!
-- Beschreibung: 1500-1750 ZEICHEN (Amazon max: 2000)
+⚠️ EXAKTE BYTE-LIMITS (KRITISCH!):
 
-WICHTIG: Nutze die verfügbare Länge MAXIMAL aus! 
-Ein kurzer Titel verschenkt SEO-Potenzial!
-Umlaute (ä,ö,ü,ß) zählen als 2 Bytes.
+📏 ZIEL-LÄNGEN (in BYTES, nicht Zeichen!):
+- TITEL: 170-200 BYTES (Ziel: ~185 Bytes)
+- BULLET POINTS: Je 170-200 BYTES (Ziel: ~185 Bytes pro Bullet)
+- BESCHREIBUNG: 1700-2000 BYTES (Ziel: ~1850 Bytes)
+
+⚠️ BYTE-ZÄHLUNG: Umlaute (ä,ö,ü,ß) = 2 Bytes, normale Buchstaben = 1 Byte
+
+💡 TIPP FÜR RICHTIGE LÄNGE:
+- Titel: ca. 25-35 Wörter
+- Bullet: ca. 25-35 Wörter pro Bullet
+- Beschreibung: ca. 250-300 Wörter
+
+WICHTIG: Nutze die Länge MAXIMAL aus! Kurze Texte verschwenden SEO-Potenzial!
 
 🚫 VERBOTEN IM OUTPUT:
 - NIEMALS "is", "has_property", "used_for" etc. im Text!
@@ -281,7 +288,9 @@ WAS GEHÖRT NICHT REIN:
 - Komplementäre Produkte
 - Wettbewerber-Marken
 
-ZIEL: 210-249 BYTES komma-getrennte Keywords
+📏 EXAKTES BYTE-ZIEL: 210-249 BYTES (Ziel: ~230 Bytes)
+💡 TIPP: ca. 15-20 Keywords/Phrasen erreichen diese Länge
+Umlaute (ä,ö,ü) = 2 Bytes!
 """
 
 # CALL 3 PROMPT: Verifikation - prüft und korrigiert nur bei Bedarf
