@@ -39,6 +39,22 @@ class KeywordContent(BaseModel):
     
     suchbegriffe: str = Field(description="NUR komma-getrennte Keywords! KEINE Sätze! Bsp: 'keyword1, keyword2, keyword3'")
 
+# CALL 3: Verifikation (prüft und korrigiert nur bei Bedarf)
+class VerificationResult(BaseModel):
+    """Ergebnis der Qualitätsprüfung"""
+    model_config = {"extra": "forbid"}
+    
+    approved: bool = Field(description="True wenn alles korrekt ist, False wenn Korrekturen nötig waren")
+    artikelname: str = Field(description="Korrigierter Titel oder Original wenn approved=True")
+    bullet_1: str = Field(description="Korrigierter Bullet 1 oder Original")
+    bullet_2: str = Field(description="Korrigierter Bullet 2 oder Original")
+    bullet_3: str = Field(description="Korrigierter Bullet 3 oder Original")
+    bullet_4: str = Field(description="Korrigierter Bullet 4 oder Original")
+    bullet_5: str = Field(description="Korrigierter Bullet 5 oder Original")
+    produktbeschreibung: str = Field(description="Korrigierte Beschreibung oder Original")
+    suchbegriffe: str = Field(description="Korrigierte Keywords oder Original")
+    issues_found: str = Field(description="Liste der gefundenen und korrigierten Probleme, oder 'Keine' wenn approved=True")
+
 # CALL 1 PROMPT: Hauptinhalt (Titel, Beschreibung, Bullets) - OHNE Keywords!
 MAIN_CONTENT_PROMPT = """Erstelle Titel, Beschreibung und Bullet Points für folgendes Amazon-Produkt.
 WICHTIG: Erstelle KEINE Keywords - diese werden separat generiert!
@@ -47,16 +63,36 @@ Produktdaten:
 {{product_data}}
 
 🔤 AUSGABESPRACHE: {{language}}
-⚠️ KRITISCH - SPRACHE FÜR ALLE FELDER:
-- TITEL: In der gewählten Sprache!
-- BULLET POINTS: In der gewählten Sprache!
-- BESCHREIBUNG: In der gewählten Sprache!
 
-ÜBERSETZE ALLE BEGRIFFE in die Zielsprache:
-- "BPA-frei" → EN: "BPA free", FR: "sans BPA", IT: "senza BPA", ES: "libre de BPA"
-- "Edelstahl" → EN: "stainless steel", FR: "acier inoxydable", IT: "acciaio inox"
-- "spülmaschinenfest" → EN: "dishwasher safe", FR: "lave-vaisselle", IT: "lavastoviglie"
-- Übersetze ALLE deutschen Produkteigenschaften korrekt!
+⛔⛔⛔ ABSOLUT KRITISCH - SPRACHE ⛔⛔⛔
+DER GESAMTE OUTPUT MUSS ZU 100% IN DER ZIELSPRACHE SEIN!
+
+EINZIGE AUSNAHMEN (dürfen original bleiben):
+- Markennamen: "Dreamfarm", "EMSA", "Philips", "Nike"
+- Produktserien: "Aveo", "Clip & Close"
+- Technische Bezeichnungen: "USB-C", "LED", "LCD"
+
+ALLES ANDERE MUSS ÜBERSETZT WERDEN:
+❌ VERBOTEN: "Pizzaschere", "Trinkflasche", "spülmaschinenfest", "auslaufsicher"
+✅ STATTDESSEN (Italienisch): "forbici per pizza", "borraccia", "lavabile in lavastoviglie", "a prova di perdite"
+✅ STATTDESSEN (Englisch): "pizza scissors", "water bottle", "dishwasher safe", "leak-proof"
+✅ STATTDESSEN (Französisch): "ciseaux à pizza", "gourde", "lavable au lave-vaisselle", "étanche"
+✅ STATTDESSEN (Spanisch): "tijeras para pizza", "botella", "apto lavavajillas", "hermético"
+
+🔄 PFLICHT-ÜBERSETZUNGEN:
+| Deutsch | Englisch | Italienisch | Französisch | Spanisch |
+|---------|----------|-------------|-------------|----------|
+| Trinkflasche | water bottle | borraccia | gourde | botella |
+| Vorratsdose | storage container | contenitore | boîte de conservation | recipiente |
+| Pizzaschere | pizza scissors | forbici per pizza | ciseaux à pizza | tijeras para pizza |
+| Käsereibe | cheese grater | grattugia | râpe à fromage | rallador |
+| spülmaschinenfest | dishwasher safe | lavabile in lavastoviglie | lave-vaisselle | apto lavavajillas |
+| BPA-frei | BPA free | senza BPA | sans BPA | libre de BPA |
+| Edelstahl | stainless steel | acciaio inox | acier inoxydable | acero inoxidable |
+| auslaufsicher | leak-proof | a prova di perdite | étanche | hermético |
+| hitzebeständig | heat resistant | resistente al calore | résistant à la chaleur | resistente al calor |
+
+⚠️ PRÜFE JEDEN SATZ: Enthält er deutsche Wörter? → ÜBERSETZEN!
 
 🎯 DENKE WIE EIN KUNDE! Was will der Käufer WIRKLICH wissen?
 
@@ -93,10 +129,13 @@ PRIORITÄT IM TITEL (in dieser Reihenfolge!):
 2. has_component - Komponenten DIREKT nach Produktart! (z.B. "mit Deckel und Griffen")
 3. has_property - Eigenschaften (Material, Größe, Farbe, Form)
 
-BEISPIELE:
-✅ GUT: "EMSA Clip & Close Vorratsdosen mit Deckel und Griffen, 3er Set rechteckig 1L 2L 3L, Kunststoff BPA-frei spülmaschinenfest, Frischhaltedosen"
-✅ GUT: "Vtopmart Aufbewahrungsbox mit Deckel luftdicht, 24er Set rechteckig, BPA-frei Kunststoff, für Mehl Zucker Müsli, Vorratsbehälter"
-❌ SCHLECHT: "EMSA – Premium Frischhalte-System für optimale Lebensmittel-Aufbewahrung" (= kein USP, keine Komponenten)
+BEISPIELE AUS VERSCHIEDENEN INDUSTRIEN:
+✅ Küche: "EMSA Vorratsdosen mit Deckel und Griffen, 3er Set 1L 2L 3L, BPA-frei spülmaschinenfest, Frischhaltedosen"
+✅ Sport: "Nike Air Zoom Laufschuhe Herren Schwarz, Größe 43, atmungsaktives Mesh, gedämpfte Sohle, Joggingschuhe"
+✅ Elektronik: "Anker PowerCore Powerbank 20000mAh, USB-C Schnellladung, 2 Ports, LED-Anzeige, kompakt für Reisen"
+✅ Baby: "Philips Avent Babyflasche mit Sauger, 260ml, Anti-Kolik-Ventil, BPA-frei, spülmaschinenfest, Erstausstattung"
+✅ Beauty: "Revlon Haartrockner mit Diffusor, 2200W, Ionentechnologie, 3 Heizstufen, Kaltluft, Föhn Salon"
+❌ SCHLECHT: "Premium Aufbewahrungs-System für optimale Organisation" (= keine konkreten Eigenschaften)
 
 REGELN FÜR TITEL:
 - KEINE vollständigen Sätze! KEINE Punkte am Ende!
@@ -111,30 +150,31 @@ REGELN FÜR TITEL:
 SPEZIELLE TITEL-REGELN:
 - Prozent als Symbol: "100%" NICHT "100 Prozent"
 - Farbe DIREKT nach Produktname, OHNE "Farbe" davor!
-  ❌ FALSCH: "black+blum Lunch Bag Lunchtasche, Farbe blau Schiefer"
-  ✅ RICHTIG: "black+blum Lunch Bag Schiefer, Lunchtasche mit Trageschlaufe"
 - Bei Farbvarianten: Farbe kommt direkt nach Produktbezeichnung!
-  ✅ RICHTIG: "ALADDIN Aveo Trinkflasche Blau 0,6L, auslaufsicher, BPA-frei"
-  ❌ FALSCH: "ALADDIN Aveo Trinkflasche 0,6L auslaufsicher BPA-frei Farbe Blau"
 
-TITEL-BEISPIEL:
-✅ GUT: "KÜCHENPROFI Käsereibe mit Kurbel und Trommel, 18/10 Edelstahl, 20 cm, für Parmesan und Hartkäse, spülmaschinenfest, Trommelreibe"
-❌ SCHLECHT: "KÜCHENPROFI Käsereibe mit Kurbel. Die robuste Reibe ist langlebig." (= Satz mit Punkt!)
+TITEL-BEISPIELE (VERSCHIEDENE INDUSTRIEN):
+✅ Küche: "WMF Profi Bratpfanne Schwarz 28cm, antihaftbeschichtet, induktionsgeeignet, Edelstahlgriff"
+✅ Sport: "Adidas Rucksack Classic Schwarz 25L, wasserabweisend, gepolsterte Gurte, Laptopfach 15 Zoll"
+✅ Elektronik: "Samsung Galaxy Buds Pro Weiß, Bluetooth 5.0, aktive Geräuschunterdrückung, IPX7 wasserdicht"
+✅ Baby: "MAM Easy Start Babyflasche 260ml Rosa, Anti-Kolik, selbststerilisierend, ab 0 Monate"
+❌ SCHLECHT: "Das Produkt ist ein tolles Gerät für jeden Tag." (= Satz!)
 
 📌 BULLET POINTS - EXAKTES FORMAT:
 
 ⚠️ KRITISCH - JEDER BULLET MUSS DIESES FORMAT HABEN:
 HOOK IN CAPS: Beschreibender Text in normaler Schreibweise.
 
-BEISPIELE KORREKTES FORMAT:
-✅ "2-IN-1-FUNKTION: Die Scizza kombiniert scharfe Edelstahlklingen mit einem integrierten Servierheber."
-✅ "AUSLAUFSICHER: Der Schraubverschluss dichtet zu 100% ab und hält Getränke sicher in der Tasche."
-✅ "EXTRA WEITE ÖFFNUNG: Die Öffnung erleichtert das Packen und Entnehmen von Dosen und Flaschen."
+BEISPIELE KORREKTES FORMAT (VERSCHIEDENE INDUSTRIEN):
+✅ Küche: "SCHARFE KLINGEN: Die Edelstahlklingen schneiden mühelos durch alle Zutaten und bleiben langlebig scharf."
+✅ Sport: "ATMUNGSAKTIVES MESH: Das leichte Obermaterial sorgt für optimale Belüftung bei intensivem Training."
+✅ Elektronik: "SCHNELLLADUNG: Mit USB-C Power Delivery lädt das Gerät bis zu 3x schneller als herkömmliche Ladegeräte."
+✅ Baby: "ANTI-KOLIK-VENTIL: Das spezielle Ventil reduziert Luftschlucken und beugt Bauchschmerzen wirksam vor."
+✅ Beauty: "IONENTECHNOLOGIE: Negative Ionen versiegeln die Haarstruktur und sorgen für glänzendes, frizzfreies Haar."
 
 BEISPIELE FALSCHES FORMAT:
-❌ "VIELSEITIGES MATERIAL: Die BOXEN aus EDELSTAHL sind robust." (BOXEN/EDELSTAHL dürfen NICHT caps sein!)
-❌ "Die weite Öffnung erleichtert das Packen von Dosen." (KEINE Hook!)
-❌ "IDEAL FÜR UNTERWEGS: PERFEKT für SCHULE und SPORT." (Zu viele CAPS im Text!)
+❌ "VIELSEITIGES MATERIAL: Die BOXEN aus EDELSTAHL sind robust." (EDELSTAHL darf NICHT caps sein!)
+❌ "Das atmungsaktive Material sorgt für Komfort." (KEINE Hook vorhanden!)
+❌ "PERFEKT FÜR SPORT: IDEAL für TRAINING und YOGA." (Zu viele CAPS im Text!)
 
 REGELN:
 1. JEDER Bullet beginnt mit einem HOOK in GROSSBUCHSTABEN (2-4 Wörter)
@@ -178,11 +218,7 @@ Umlaute (ä,ö,ü,ß) zählen als 2 Bytes.
 - Behalte technische Bezeichnungen EXAKT: "18/10 Edelstahl", "BPA-frei", "0,5L"
 - Titel muss LESBAR sein - nicht nur Keywords aneinanderreihen!
 
-BEISPIEL GUTER TITEL:
-"KÜCHENPROFI Käsereibe mit Kurbel und Trommel aus 18/10 Edelstahl, 20 cm, für Parmesan und Hartkäse, spülmaschinenfest"
-NICHT: "KÜCHENPROFI Käsereibe Kurbel Trommel 18 10 Edelstahl 20 cm Parmesan Hartkäse Spülmaschinenfest"
-
-WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS!
+WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS! Titel muss LESBAR sein - nicht nur Keywords aneinanderreihen!
 """
 
 # CALL 2 PROMPT: Keywords - SEPARATER FOKUSSIERTER CALL
@@ -211,15 +247,17 @@ BESCHREIBUNG: {{description}}
 ✅ RICHTIG: "keyword1, keyword2, keyword3, keyword4, keyword5"
 ❌ FALSCH: "Das Produkt ist ideal für die Küche. Es eignet sich perfekt für..."
 
-BEISPIELE KORREKTES FORMAT:
-✅ "käsehobel, reibemaschine, parmesan raspel, küchengerät hand, hartkäse reibe, kaesereibe, parmesanreibe"
-✅ "lunch box isoliert, brotdose erwachsene, meal prep box, essen transport, lunchbag, vesperbox"
-✅ "water bottle kids, drinking flask, sports bottle, gym water bottle, leak proof bottle"
+BEISPIELE KORREKTES FORMAT (VERSCHIEDENE INDUSTRIEN):
+✅ Küche: "küchenhelfer, küchenzubehör, kochwerkzeug, haushalt, küche gadget"
+✅ Sport: "fitness zubehör, gym equipment, workout gear, training accessory"
+✅ Elektronik: "ladegerät, charging device, portable charger, usb charger, mobile power"
+✅ Baby: "babyzubehör, säuglingsausstattung, stillzubehör, babycare, newborn"
+✅ Beauty: "haarpflege, styling tool, salon zubehör, friseur werkzeug"
 
 BEISPIELE FALSCHES FORMAT:
-❌ "Die Käsereibe ist ideal für Parmesan. Robustes Material für die Küche."
-❌ "Manuelle Zitronenpresse aus robustem Material. Ideal als Citronpresse für Bar und Küche."
-❌ "Black+Blum Lunchtasche Schiefer, isolierende Roll-up Lunchbag aus recyceltem PET."
+❌ "Die Käsereibe ist ideal für Parmesan. Robustes Material." (= ganze Sätze!)
+❌ "Perfektes Ladegerät für unterwegs mit schneller Aufladung." (= Beschreibung!)
+❌ "Der Haartrockner eignet sich für professionelles Styling." (= Satz!)
 
 STRENGE REGELN:
 1. NUR einzelne Wörter oder 2-3 Wort-Kombinationen!
@@ -246,6 +284,64 @@ WAS GEHÖRT NICHT REIN:
 ZIEL: 210-249 BYTES komma-getrennte Keywords
 """
 
+# CALL 3 PROMPT: Verifikation - prüft und korrigiert nur bei Bedarf
+VERIFICATION_PROMPT = """Du bist ein strenger Qualitätsprüfer für Amazon-Listings.
+
+🔤 ZIELSPRACHE: {{language}}
+
+Prüfe den folgenden Content und korrigiere NUR wenn wirklich nötig.
+Wenn alles korrekt ist, gib den Original-Content zurück mit approved=True.
+
+═══════════════════════════════════════════════════════════════════
+📋 ZU PRÜFENDER CONTENT:
+═══════════════════════════════════════════════════════════════════
+
+TITEL: {{title}}
+
+BULLET 1: {{bullet1}}
+BULLET 2: {{bullet2}}
+BULLET 3: {{bullet3}}
+BULLET 4: {{bullet4}}
+BULLET 5: {{bullet5}}
+
+BESCHREIBUNG: {{description}}
+
+KEYWORDS: {{keywords}}
+
+═══════════════════════════════════════════════════════════════════
+✅ PRÜFKRITERIEN:
+═══════════════════════════════════════════════════════════════════
+
+1. SPRACHE: Ist ALLES in der Zielsprache (außer Markennamen)?
+   ❌ FEHLER: Deutsche Wörter in italienischem/englischem/etc. Output
+   
+2. TITEL-FORMAT:
+   ❌ FEHLER: Endet mit Punkt
+   ❌ FEHLER: Ist ein vollständiger Satz
+   ❌ FEHLER: "100 Prozent" statt "100%"
+   ❌ FEHLER: "Farbe blau" statt Farbe direkt nach Produktname
+   
+3. BULLET-FORMAT:
+   ❌ FEHLER: Kein HOOK am Anfang (muss CAPS sein)
+   ❌ FEHLER: Kein Doppelpunkt nach HOOK
+   ❌ FEHLER: Weitere CAPS-Wörter im beschreibenden Text
+   ❌ FEHLER: Unvollständiger Satz (abgebrochen)
+   
+4. KEYWORDS:
+   ❌ FEHLER: Ganze Sätze statt komma-getrennte Wörter
+   ❌ FEHLER: Punkte im Text
+   ❌ FEHLER: Beschreibende Phrasen
+
+═══════════════════════════════════════════════════════════════════
+⚠️ WICHTIG:
+═══════════════════════════════════════════════════════════════════
+
+- Korrigiere NUR echte Fehler!
+- Ändere NICHT den Inhalt, nur das Format wenn nötig!
+- Wenn alles OK ist: approved=True und Original-Content zurückgeben!
+- Bei Korrekturen: approved=False und korrigierten Content + issues_found
+"""
+
 # Page Config
 st.set_page_config(
     page_title="Amazon Content Optimizer",
@@ -260,6 +356,8 @@ if 'main_content_prompt' not in st.session_state:
     st.session_state.main_content_prompt = MAIN_CONTENT_PROMPT
 if 'keyword_prompt' not in st.session_state:
     st.session_state.keyword_prompt = KEYWORD_PROMPT
+if 'verification_prompt' not in st.session_state:
+    st.session_state.verification_prompt = VERIFICATION_PROMPT
 
 # Title
 st.title("✍️ Amazon Content Optimizer")
@@ -588,6 +686,7 @@ if opt_file:
                 # Store prompts locally for thread safety
                 main_prompt_template = st.session_state.main_content_prompt
                 keyword_prompt_template = st.session_state.keyword_prompt
+                verification_prompt_template = st.session_state.verification_prompt
                 lang_instruction = language_options[selected_language]
                 
                 def process_product(idx, row, id_col_name, title_col_name, poe_kws):
@@ -607,7 +706,7 @@ if opt_file:
                         response1 = client.chat.completions.create(
                             model="gpt-5.1",
                             messages=[
-                                {"role": "system", "content": f"Amazon SEO-Experte. OUTPUT LANGUAGE: {lang_instruction}. Schreibe VOLLSTÄNDIGE Sätze! Fokus: Titel, Bullets, Beschreibung."},
+                                {"role": "system", "content": f"Amazon SEO-Experte. KRITISCH: Schreibe 100% in der Zielsprache! Keine deutschen Wörter außer Markennamen! OUTPUT: {lang_instruction}"},
                                 {"role": "user", "content": main_prompt}
                             ],
                             response_format={
@@ -692,21 +791,116 @@ if opt_file:
                                 keyword_content.suchbegriffe, 210, 249, f"Keywords P{idx+1}", client, product_data_str)
                         
                         # ========================================
+                        # CALL 3: Verifikation (prüft und korrigiert nur bei Bedarf)
+                        # ========================================
+                        logger.info(f"Produkt {idx + 1}: Call 3 - Verifikation...")
+                        
+                        verify_prompt = verification_prompt_template
+                        verify_prompt = verify_prompt.replace("{{language}}", lang_instruction)
+                        verify_prompt = verify_prompt.replace("{{title}}", main_content.artikelname)
+                        verify_prompt = verify_prompt.replace("{{bullet1}}", main_content.bullet_points[0] if len(main_content.bullet_points) > 0 else "")
+                        verify_prompt = verify_prompt.replace("{{bullet2}}", main_content.bullet_points[1] if len(main_content.bullet_points) > 1 else "")
+                        verify_prompt = verify_prompt.replace("{{bullet3}}", main_content.bullet_points[2] if len(main_content.bullet_points) > 2 else "")
+                        verify_prompt = verify_prompt.replace("{{bullet4}}", main_content.bullet_points[3] if len(main_content.bullet_points) > 3 else "")
+                        verify_prompt = verify_prompt.replace("{{bullet5}}", main_content.bullet_points[4] if len(main_content.bullet_points) > 4 else "")
+                        verify_prompt = verify_prompt.replace("{{description}}", main_content.produktbeschreibung)
+                        verify_prompt = verify_prompt.replace("{{keywords}}", keyword_content.suchbegriffe)
+                        
+                        response3 = client.chat.completions.create(
+                            model="gpt-5.1",
+                            messages=[
+                                {"role": "system", "content": f"Strenger Qualitätsprüfer für Amazon-Listings. Prüfe und korrigiere NUR bei echten Fehlern! Zielsprache: {lang_instruction}"},
+                                {"role": "user", "content": verify_prompt}
+                            ],
+                            response_format={
+                                "type": "json_schema",
+                                "json_schema": {
+                                    "name": "verification_result",
+                                    "schema": VerificationResult.model_json_schema(),
+                                    "strict": True
+                                }
+                            },
+                            max_completion_tokens=4000
+                        )
+                        
+                        verification = VerificationResult.model_validate_json(response3.choices[0].message.content)
+                        
+                        # Übernehme verifizierte/korrigierte Werte
+                        final_title = verification.artikelname
+                        final_bullets = [
+                            verification.bullet_1,
+                            verification.bullet_2,
+                            verification.bullet_3,
+                            verification.bullet_4,
+                            verification.bullet_5
+                        ]
+                        final_description = verification.produktbeschreibung
+                        final_keywords = verification.suchbegriffe
+                        
+                        if verification.approved:
+                            logger.info(f"Produkt {idx + 1}: ✅ Verifikation bestanden")
+                        else:
+                            logger.info(f"Produkt {idx + 1}: ⚠️ Korrekturen: {verification.issues_found}")
+                            
+                            # ========================================
+                            # Längenkorrektur für geänderte Texte nach Verifikation
+                            # ========================================
+                            
+                            # Titel prüfen (falls geändert)
+                            if final_title != main_content.artikelname:
+                                title_bytes = get_byte_length(final_title)
+                                if title_bytes < 170 or title_bytes > 200:
+                                    final_title = ensure_optimal_length_with_ai(
+                                        final_title, 170, 200, f"Titel P{idx+1} post-verify", client, product_data_str)
+                            
+                            # Bullets prüfen (falls geändert)
+                            original_bullets = main_content.bullet_points
+                            for i in range(5):
+                                if i < len(original_bullets) and final_bullets[i] != original_bullets[i]:
+                                    bp_bytes = get_byte_length(final_bullets[i])
+                                    if bp_bytes < 170 or bp_bytes > 200:
+                                        final_bullets[i] = ensure_optimal_length_with_ai(
+                                            final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str)
+                            
+                            # Beschreibung prüfen (falls geändert)
+                            if final_description != main_content.produktbeschreibung:
+                                desc_bytes = get_byte_length(final_description)
+                                if desc_bytes < 1700 or desc_bytes > 2000:
+                                    final_description = ensure_optimal_length_with_ai(
+                                        final_description, 1700, 2000, f"Beschreibung P{idx+1} post-verify", client, product_data_str)
+                            
+                            # Keywords prüfen (falls geändert)
+                            if final_keywords != keyword_content.suchbegriffe:
+                                kw_bytes = get_byte_length(final_keywords)
+                                if kw_bytes < 210 or kw_bytes > 249:
+                                    final_keywords = ensure_optimal_length_with_ai(
+                                        final_keywords, 210, 249, f"Keywords P{idx+1} post-verify", client, product_data_str)
+                        
+                        # ========================================
                         # Ergebnis zusammenführen
                         # ========================================
                         result_row = {
                             "idx": idx,  # For sorting later
                             "Identifier": row[id_col_name],
                             "Old Title": row[title_col_name] if title_col_name != "-" else "",
-                            "New Title": main_content.artikelname,
-                            "New Description": main_content.produktbeschreibung,
-                            "New Keyword": keyword_content.suchbegriffe
+                            "New Title": final_title,
+                            "New Description": final_description,
+                            "New Keyword": final_keywords
                         }
-                        for i, bp in enumerate(main_content.bullet_points, 1):
+                        for i, bp in enumerate(final_bullets, 1):
                             result_row[f"New Bullet {i}"] = bp
                         
                         logger.info(f"✅ Produkt {idx + 1} fertig!")
-                        return {"success": True, "data": result_row, "main_content": main_content, "keywords": keyword_content}
+                        return {
+                            "success": True, 
+                            "data": result_row, 
+                            "final_title": final_title,
+                            "final_bullets": final_bullets,
+                            "final_description": final_description,
+                            "final_keywords": final_keywords,
+                            "verified": verification.approved,
+                            "issues": verification.issues_found
+                        }
                     
                     except Exception as e:
                         logger.error(f"Fehler bei Produkt {idx + 1}: {e}", exc_info=True)
@@ -735,18 +929,25 @@ if opt_file:
                             with results_lock:
                                 results.append(result["data"])
                             
-                            main_content = result["main_content"]
-                            keyword_content = result["keywords"]
+                            final_title = result["final_title"]
+                            final_bullets = result["final_bullets"]
+                            final_keywords = result["final_keywords"]
+                            final_description = result["final_description"]
+                            verified = result["verified"]
+                            issues = result["issues"]
                             
-                            with st.expander(f"✅ Produkt {idx + 1}: {main_content.artikelname[:50]}..."):
-                                st.write("**Titel:**", main_content.artikelname)
-                                st.write(f"*({get_byte_length(main_content.artikelname)} bytes)*")
+                            status_icon = "✅" if verified else "🔧"
+                            with st.expander(f"{status_icon} Produkt {idx + 1}: {final_title[:50]}..."):
+                                if not verified:
+                                    st.warning(f"⚠️ Korrekturen vorgenommen: {issues}")
+                                st.write("**Titel:**", final_title)
+                                st.write(f"*({get_byte_length(final_title)} bytes)*")
                                 st.write("**Bullets:**")
-                                for i, bp in enumerate(main_content.bullet_points, 1):
+                                for i, bp in enumerate(final_bullets, 1):
                                     st.write(f"• {bp} *({get_byte_length(bp)} bytes)*")
-                                st.write("**Keywords:**", keyword_content.suchbegriffe)
-                                st.write(f"*({get_byte_length(keyword_content.suchbegriffe)} bytes)*")
-                                st.caption("**Beschreibung:** " + main_content.produktbeschreibung[:100] + "...")
+                                st.write("**Keywords:**", final_keywords)
+                                st.write(f"*({get_byte_length(final_keywords)} bytes)*")
+                                st.caption("**Beschreibung:** " + final_description[:100] + "...")
                         else:
                             st.error(f"❌ Fehler bei Produkt {idx + 1}: {result['error']}")
                 
