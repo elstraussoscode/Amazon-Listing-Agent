@@ -10,8 +10,9 @@ import io
 from typing import List
 import logging
 from pydantic import BaseModel, Field
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -137,9 +138,13 @@ BEISPIELE AUS VERSCHIEDENEN INDUSTRIEN:
 ✅ Beauty: "Revlon Haartrockner mit Diffusor, 2200W, Ionentechnologie, 3 Heizstufen, Kaltluft, Föhn Salon"
 ❌ SCHLECHT: "Premium Aufbewahrungs-System für optimale Organisation" (= keine konkreten Eigenschaften)
 
+⛔ TITEL DARF KEINEN PUNKT ENTHALTEN!
+⛔ TITEL DARF KEIN VOLLSTÄNDIGER SATZ SEIN!
+⛔ TITEL DARF KEINE BINDESTRICHE ALS TRENNZEICHEN ENTHALTEN!
+
 REGELN FÜR TITEL:
-- KEINE vollständigen Sätze! KEINE Punkte am Ende!
-- Titel = Auflistung von Features/Keywords, getrennt durch Kommata
+- KEIN Punkt (.) im gesamten Titel! NIEMALS!
+- KEINE vollständigen Sätze! Titel = Auflistung von Features/Keywords!
 - Trenne Sinnabschnitte mit Kommata, KEINE Bindestriche als Trennzeichen!
 - ABER: Behalte technische Bezeichnungen wie "18/10 Edelstahl", "BPA-frei"
 - Komponenten IMMER direkt nach Produktbezeichnung (Long-Tail-Keywords!)
@@ -150,6 +155,8 @@ REGELN FÜR TITEL:
 SPEZIELLE TITEL-REGELN:
 - Prozent als Symbol: "100%" NICHT "100 Prozent"
 - Farbe DIREKT nach Produktname, OHNE "Farbe" davor!
+  ❌ "Lunch Bag Farbe blau Schiefer" → ✅ "Lunch Bag Schiefer"
+  ❌ "Flasche Farbe olive grün" → ✅ "Flasche Olive"
 - Bei Farbvarianten: Farbe kommt direkt nach Produktbezeichnung!
 
 TITEL-BEISPIELE (VERSCHIEDENE INDUSTRIEN):
@@ -157,31 +164,37 @@ TITEL-BEISPIELE (VERSCHIEDENE INDUSTRIEN):
 ✅ Sport: "Adidas Rucksack Classic Schwarz 25L, wasserabweisend, gepolsterte Gurte, Laptopfach 15 Zoll"
 ✅ Elektronik: "Samsung Galaxy Buds Pro Weiß, Bluetooth 5.0, aktive Geräuschunterdrückung, IPX7 wasserdicht"
 ✅ Baby: "MAM Easy Start Babyflasche 260ml Rosa, Anti-Kolik, selbststerilisierend, ab 0 Monate"
-❌ SCHLECHT: "Das Produkt ist ein tolles Gerät für jeden Tag." (= Satz!)
+❌ SCHLECHT: "Das Produkt ist ein tolles Gerät für jeden Tag." (= Satz mit Punkt!)
+❌ SCHLECHT: "Flasche 850 ml, 100 Prozent auslaufsicher" (= "Prozent" statt "%"!)
+❌ SCHLECHT: "Kühltasche - isolierend - wasserabweisend" (= Bindestriche als Trennzeichen!)
 
 📌 BULLET POINTS - EXAKTES FORMAT:
 
-⚠️ KRITISCH - JEDER BULLET MUSS DIESES FORMAT HABEN:
-HOOK IN CAPS: Beschreibender Text in normaler Schreibweise.
+⛔⛔⛔ KRITISCH - JEDER BULLET MUSS EXAKT DIESES FORMAT HABEN:
+HOOK IN CAPS: Beschreibender Text in normaler Schreibweise mit einem vollständigen Satz.
+
+SCHEMA: [2-4 WÖRTER IN GROSSBUCHSTABEN]: [Normaler Satz mit ca. 25-35 Wörtern gesamt.]
 
 BEISPIELE KORREKTES FORMAT (VERSCHIEDENE INDUSTRIEN):
 ✅ Küche: "SCHARFE KLINGEN: Die Edelstahlklingen schneiden mühelos durch alle Zutaten und bleiben langlebig scharf."
-✅ Sport: "ATMUNGSAKTIVES MESH: Das leichte Obermaterial sorgt für optimale Belüftung bei intensivem Training."
-✅ Elektronik: "SCHNELLLADUNG: Mit USB-C Power Delivery lädt das Gerät bis zu 3x schneller als herkömmliche Ladegeräte."
-✅ Baby: "ANTI-KOLIK-VENTIL: Das spezielle Ventil reduziert Luftschlucken und beugt Bauchschmerzen wirksam vor."
-✅ Beauty: "IONENTECHNOLOGIE: Negative Ionen versiegeln die Haarstruktur und sorgen für glänzendes, frizzfreies Haar."
+✅ Sport: "ATMUNGSAKTIVES MESH: Das leichte Obermaterial sorgt für optimale Belüftung bei intensivem Training und bleibt angenehm auf der Haut."
+✅ Elektronik: "SCHNELLLADUNG: Mit USB-C Power Delivery lädt das Gerät bis zu 3x schneller als herkömmliche Ladegeräte und spart wertvolle Zeit."
+✅ Baby: "ANTI-KOLIK-VENTIL: Das spezielle Ventil reduziert Luftschlucken und beugt Bauchschmerzen wirksam vor, damit das Baby entspannt trinkt."
+✅ Beauty: "IONENTECHNOLOGIE: Negative Ionen versiegeln die Haarstruktur und sorgen für glänzendes, frizzfreies Haar nach jedem Föhnen."
 
 BEISPIELE FALSCHES FORMAT:
-❌ "VIELSEITIGES MATERIAL: Die BOXEN aus EDELSTAHL sind robust." (EDELSTAHL darf NICHT caps sein!)
-❌ "Das atmungsaktive Material sorgt für Komfort." (KEINE Hook vorhanden!)
-❌ "PERFEKT FÜR SPORT: IDEAL für TRAINING und YOGA." (Zu viele CAPS im Text!)
+❌ "VIELSEITIGES MATERIAL: Die BOXEN aus EDELSTAHL sind robust." (EDELSTAHL/BOXEN darf NICHT caps sein im Text nach dem Doppelpunkt!)
+❌ "Das atmungsaktive Material sorgt für Komfort." (KEINE Hook vorhanden! Muss mit CAPS-HOOK: beginnen!)
+❌ "PERFEKT FÜR SPORT: IDEAL für TRAINING und YOGA." (IDEAL/TRAINING/YOGA dürfen NICHT caps sein nach dem Doppelpunkt!)
+❌ "EXTRA WEITE ÖFFNUNG: Die Öffnung erleichtert das Packen und Entnehmen von Dosen, Flaschen, Snacks und Obst. Der Roll-up Verschl" (ABGEBROCHEN! Satz muss vollständig sein!)
 
 REGELN:
 1. JEDER Bullet beginnt mit einem HOOK in GROSSBUCHSTABEN (2-4 Wörter)
-2. Nach dem Hook kommt ein DOPPELPUNKT
+2. Nach dem Hook kommt ein DOPPELPUNKT und ein Leerzeichen
 3. Dann folgt der beschreibende Text in NORMALER Schreibweise
-4. Im beschreibenden Text KEINE weiteren CAPS-Wörter!
-5. Vollständige Sätze, NIEMALS abbrechen!
+4. Im beschreibenden Text nach dem Doppelpunkt KEINE EINZIGEN weiteren CAPS-Wörter! Nur normale Groß-/Kleinschreibung!
+5. Vollständige Sätze, NIEMALS mitten im Wort oder Satz abbrechen!
+6. Jeder Bullet = ca. 25-35 Wörter gesamt (Hook + beschreibender Text)
 
 DIE 5 BULLETS MÜSSEN ABDECKEN:
 1. HAUPTVORTEIL: Der größte Nutzen für den Kunden
@@ -250,36 +263,51 @@ BESCHREIBUNG: {{description}}
 
 🔑 DEINE AUFGABE: BACKEND-KEYWORDS ERSTELLEN (210-249 BYTES)
 
-⚠️ KRITISCHES FORMAT - NUR SO:
-✅ RICHTIG: "keyword1, keyword2, keyword3, keyword4, keyword5"
-❌ FALSCH: "Das Produkt ist ideal für die Küche. Es eignet sich perfekt für..."
+⛔⛔⛔ ABSOLUT KRITISCH - FORMAT ⛔⛔⛔
 
-BEISPIELE KORREKTES FORMAT (VERSCHIEDENE INDUSTRIEN):
-✅ Küche: "küchenhelfer, küchenzubehör, kochwerkzeug, haushalt, küche gadget"
-✅ Sport: "fitness zubehör, gym equipment, workout gear, training accessory"
-✅ Elektronik: "ladegerät, charging device, portable charger, usb charger, mobile power"
-✅ Baby: "babyzubehör, säuglingsausstattung, stillzubehör, babycare, newborn"
-✅ Beauty: "haarpflege, styling tool, salon zubehör, friseur werkzeug"
+Dein Output MUSS so aussehen:
+wort1, wort2, begriff drei, wort4, wort5, ...
 
-BEISPIELE FALSCHES FORMAT:
-❌ "Die Käsereibe ist ideal für Parmesan. Robustes Material." (= ganze Sätze!)
-❌ "Perfektes Ladegerät für unterwegs mit schneller Aufladung." (= Beschreibung!)
-❌ "Der Haartrockner eignet sich für professionelles Styling." (= Satz!)
+WENN DEIN OUTPUT EINEN PUNKT (.) ENTHÄLT, IST ER FALSCH!
+WENN DEIN OUTPUT EINEN GANZEN SATZ ENTHÄLT, IST ER FALSCH!
+WENN EIN KEYWORD MEHR ALS 3 WÖRTER HAT, IST ES FALSCH!
+
+Jedes Keyword = 1-3 Wörter. KEINE Artikel (der/die/das/ein/eine). KEINE Verben im Infinitiv als Satzanfang.
+
+✅ RICHTIG:
+küchenhelfer, küchenzubehör, kochwerkzeug, haushalt gadget, edelstahl reibe, parmesan hobel
+
+✅ RICHTIG (Sport):
+fitness zubehör, gym equipment, workout gear, trainingsband, resistance band
+
+✅ RICHTIG (Elektronik):
+ladegerät usb, portable charger, schnellladung, power bank klein, reise adapter
+
+✅ RICHTIG (Baby):
+babyzubehör, säuglingsausstattung, babycare, erstausstattung, neugeborene
+
+❌ FALSCH - SÄTZE:
+"Die Käsereibe ist ideal für Parmesan. Robustes Material." → MUSS SEIN: "parmesan hobel, robuste reibe, hartkäse raspel"
+
+❌ FALSCH - ZU LANG:
+"Perfektes Ladegerät für unterwegs mit schneller Aufladung" → MUSS SEIN: "ladegerät unterwegs, schnellladung, reise charger"
+
+❌ FALSCH - MIT PUNKTEN:
+"Küchenhelfer. Gadget. Haushalt." → MUSS SEIN: "küchenhelfer, gadget, haushalt"
 
 STRENGE REGELN:
-1. NUR einzelne Wörter oder 2-3 Wort-Kombinationen!
+1. NUR 1-3 Wörter pro Keyword!
 2. Getrennt durch KOMMAS!
-3. KEINE ganzen Sätze!
-4. KEINE Punkte!
-5. KEINE Beschreibungen!
+3. KEINE Punkte im gesamten Output!
+4. KEINE ganzen Sätze!
+5. KEINE Beschreibungen oder Erklärungen!
 6. Alles kleingeschrieben (außer Markennamen)!
 7. KEINE Begriffe die bereits im Titel, Bullets oder Beschreibung stehen!
 
 WAS GEHÖRT REIN:
-- Synonyme für Begriffe im Titel (z.B. "Trinkflasche" → "wasserflasche, flasche, bottle")
+- Synonyme (z.B. Trinkflasche im Titel → "wasserflasche, flasche, bottle")
 - Schreibvarianten ohne Umlaut (z.B. "käsereibe" → "kaesereibe")
-- Long-Tail-Keywords (z.B. "manuell ohne strom", "küchenhelfer hand")
-- Relevante Anwendungsfälle als einzelne Keywords
+- Long-Tail 2-3 Wort Kombinationen (z.B. "manuell ohne strom", "küchenhelfer hand")
 - POE-Suchbegriffe die NICHT im Text stehen
 
 WAS GEHÖRT NICHT REIN:
@@ -318,36 +346,45 @@ BESCHREIBUNG: {{description}}
 KEYWORDS: {{keywords}}
 
 ═══════════════════════════════════════════════════════════════════
-✅ PRÜFKRITERIEN:
+✅ PRÜFKRITERIEN (JEDES IST PFLICHT!):
 ═══════════════════════════════════════════════════════════════════
 
-1. SPRACHE: Ist ALLES in der Zielsprache (außer Markennamen)?
-   ❌ FEHLER: Deutsche Wörter in italienischem/englischem/etc. Output
-   
+1. SPRACHE: Ist ALLES in der Zielsprache (außer Markennamen, Seriennamen, technische Begriffe)?
+   ❌ FEHLER: Deutsche Wörter in italienischem/englischem/etc. Output (z.B. "BPA-frei" in EN statt "BPA free")
+   ❌ FEHLER: "spülmaschinenfest" in EN statt "dishwasher safe"
+
 2. TITEL-FORMAT:
-   ❌ FEHLER: Endet mit Punkt
+   ❌ FEHLER: Enthält einen Punkt (.)
    ❌ FEHLER: Ist ein vollständiger Satz
    ❌ FEHLER: "100 Prozent" statt "100%"
    ❌ FEHLER: "Farbe blau" statt Farbe direkt nach Produktname
-   
-3. BULLET-FORMAT:
-   ❌ FEHLER: Kein HOOK am Anfang (muss CAPS sein)
+   ❌ FEHLER: Bindestriche als Trennzeichen zwischen Abschnitten (nur Kommata erlaubt!)
+   → Wenn Titel einen Punkt enthält, ENTFERNE ihn und kürze wenn nötig!
+
+3. BULLET-FORMAT (JEDER einzelne Bullet prüfen!):
+   ❌ FEHLER: Kein HOOK am Anfang (muss 2-4 CAPS-Wörter + Doppelpunkt sein!)
    ❌ FEHLER: Kein Doppelpunkt nach HOOK
-   ❌ FEHLER: Weitere CAPS-Wörter im beschreibenden Text
-   ❌ FEHLER: Unvollständiger Satz (abgebrochen)
-   
+   ❌ FEHLER: Weitere CAPS-Wörter im beschreibenden Text nach dem Doppelpunkt
+   ❌ FEHLER: Unvollständiger Satz (abgebrochen, letztes Wort unvollständig)
+   → Wenn Hook fehlt: Füge einen passenden HOOK hinzu!
+   → Wenn CAPS im Text: Wandle in normale Schreibweise um!
+   → Wenn Satz abgebrochen: Vervollständige den Satz!
+
 4. KEYWORDS:
-   ❌ FEHLER: Ganze Sätze statt komma-getrennte Wörter
-   ❌ FEHLER: Punkte im Text
-   ❌ FEHLER: Beschreibende Phrasen
+   ❌ FEHLER: Enthält Punkte (.) → ENTFERNE alle Punkte!
+   ❌ FEHLER: Ganze Sätze statt komma-getrennte Wörter → Zerlege in einzelne Keywords!
+   ❌ FEHLER: Keywords mit mehr als 3 Wörtern → Kürze auf 1-3 Wörter!
+   ❌ FEHLER: Beschreibende Phrasen mit Verben → Reduziere auf Substantive/Adjektive!
+   → Keywords müssen IMMER so aussehen: "wort1, wort2, begriff drei, wort4"
 
 ═══════════════════════════════════════════════════════════════════
 ⚠️ WICHTIG:
 ═══════════════════════════════════════════════════════════════════
 
-- Korrigiere NUR echte Fehler!
-- Ändere NICHT den Inhalt, nur das Format wenn nötig!
-- Wenn alles OK ist: approved=True und Original-Content zurückgeben!
+- Korrigiere NUR echte Fehler gegen die obigen Regeln!
+- Ändere NICHT den inhaltlichen Kern, nur Format wenn nötig!
+- Behalte die Länge der Texte möglichst bei! Nicht unnötig kürzen oder verlängern!
+- Wenn alles OK ist: approved=True und Original-Content EXAKT zurückgeben!
 - Bei Korrekturen: approved=False und korrigierten Content + issues_found
 """
 
@@ -358,9 +395,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# Known GPT models as fallback if API listing fails
+KNOWN_GPT_MODELS = ["gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
+
 # Initialize Session State
 if 'api_key' not in st.session_state:
     st.session_state.api_key = ""
+if 'available_models' not in st.session_state:
+    st.session_state.available_models = KNOWN_GPT_MODELS
+if 'selected_model' not in st.session_state:
+    st.session_state.selected_model = "gpt-5.1"
 if 'main_content_prompt' not in st.session_state:
     st.session_state.main_content_prompt = MAIN_CONTENT_PROMPT
 if 'keyword_prompt' not in st.session_state:
@@ -380,11 +424,26 @@ with st.sidebar:
         "OpenAI API Key",
         value=st.session_state.api_key,
         type="password",
-        help="Ihr OpenAI API Key für GPT-5.1"
+        help="Ihr OpenAI API Key"
     )
     
     if st.button("💾 API Key speichern"):
         st.session_state.api_key = api_key_input
+        if api_key_input.strip():
+            try:
+                temp_client = OpenAI(api_key=api_key_input)
+                models_response = temp_client.models.list()
+                gpt_models = sorted(
+                    [m.id for m in models_response.data if m.id.startswith("gpt-") and "realtime" not in m.id and "audio" not in m.id],
+                    key=lambda x: getattr(next((m for m in models_response.data if m.id == x), None), 'created', 0),
+                    reverse=True
+                )
+                if gpt_models:
+                    st.session_state.available_models = gpt_models
+                    logger.info(f"Loaded {len(gpt_models)} GPT models from API")
+            except Exception as e:
+                logger.warning(f"Could not load models from API: {e}")
+                st.session_state.available_models = KNOWN_GPT_MODELS
         st.success("✅ API Key gespeichert!")
     
     st.markdown("---")
@@ -392,6 +451,19 @@ with st.sidebar:
         st.success("✅ API Key konfiguriert")
     else:
         st.error("❌ API Key fehlt")
+    
+    available = st.session_state.available_models
+    default_idx = 0
+    if st.session_state.selected_model in available:
+        default_idx = available.index(st.session_state.selected_model)
+    
+    selected = st.selectbox(
+        "KI-Modell",
+        options=available,
+        index=default_idx,
+        help="Wähle das OpenAI-Modell für die Content-Generierung"
+    )
+    st.session_state.selected_model = selected
     
     with st.expander("✏️ Prompts bearbeiten"):
         st.caption("**Call 1:** Titel, Beschreibung, Bullets")
@@ -417,96 +489,108 @@ with st.sidebar:
 def get_byte_length(text: str) -> int:
     return len(text.encode('utf-8'))
 
-def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, field_name: str, client_instance, product_context: str = "", max_retries: int = 5) -> str:
+def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, field_name: str, client_instance, product_context: str = "", max_retries: int = 5, model_name: str = "gpt-5.1", language: str = "") -> str:
     """
-    Ensure text is within optimal byte range (min_bytes to max_bytes).
-    Uses LLM to adjust text - NO truncation fallback.
-    Retries until text is in correct range or max_retries reached.
+    Ensure text is within optimal byte range using word-count guidance.
+    Computes avg bytes/word from actual text, then tells the LLM exactly
+    how many words to add/remove — something it can actually follow.
+    Always operates in the specified output language.
     """
     current_text = text
     current_bytes = get_byte_length(current_text)
     
-    # Already in optimal range
     if min_bytes <= current_bytes <= max_bytes:
         logger.info(f"✅ {field_name}: {current_bytes} bytes (OK)")
         return current_text
     
-    target_bytes = (min_bytes + max_bytes) // 2
+    # Aim at 70% up the range — safety margin below max
+    target_bytes = min_bytes + int((max_bytes - min_bytes) * 0.7)
+    
+    lang_hint = f"CRITICAL: Output MUST be 100% in {language}. Do NOT change the language!" if language else ""
+    
+    field_lower = field_name.lower()
+    if "titel" in field_lower or "title" in field_lower:
+        field_type_hint = "Amazon product title. NO period at the end! NO full sentence! Comma-separated feature listing only."
+    elif "bullet" in field_lower:
+        field_type_hint = "Amazon bullet point. Format: HOOK IN CAPS: Descriptive text. Complete sentence, NEVER cut off mid-sentence!"
+    elif "keyword" in field_lower:
+        field_type_hint = "Amazon backend keywords. ONLY comma-separated words/phrases (1-3 words). NO sentences! NO periods!"
+    else:
+        field_type_hint = "Amazon product description. Complete, readable sentences."
     
     for attempt in range(max_retries):
         current_bytes = get_byte_length(current_text)
         
-        # Check if now in range
         if min_bytes <= current_bytes <= max_bytes:
             logger.info(f"✅ {field_name}: {current_bytes} bytes (nach {attempt} Anpassungen)")
             return current_text
         
-        # Determine action
+        words = current_text.split()
+        word_count = len(words)
+        avg_bytes_per_word = current_bytes / word_count if word_count > 0 else 6
+        target_word_count = round(target_bytes / avg_bytes_per_word)
+        word_diff = target_word_count - word_count
+        
         if current_bytes < min_bytes:
-            action = "ERWEITERE"
-            direction = "zu kurz"
-            needed = min_bytes - current_bytes
-            target_chars = int((target_bytes) / 1.12)
+            action = "EXPAND"
+            word_instruction = f"Add approximately {abs(word_diff)} words with relevant product details. Target: {target_word_count} words total."
         else:
-            action = "KÜRZE"
-            direction = "zu lang"
-            needed = current_bytes - max_bytes
-            target_chars = int((target_bytes) / 1.12)
+            action = "SHORTEN"
+            word_instruction = f"Remove approximately {abs(word_diff)} words. Target: {target_word_count} words total."
         
-        logger.info(f"⚠️ {field_name} {direction} ({current_bytes} bytes, Ziel: {min_bytes}-{max_bytes}). Versuch {attempt + 1}...")
+        logger.info(f"⚠️ {field_name} ({current_bytes}B, {word_count}W → target: ~{target_word_count}W). Attempt {attempt + 1}/{max_retries}...")
         
-        prompt = f"""{action} diesen Text auf EXAKT {min_bytes}-{max_bytes} BYTES.
+        prompt = f"""{action} this text. It currently has {word_count} words.
+{word_instruction}
 
-AKTUELL: {current_bytes} Bytes ({direction} um {needed} Bytes)
-ZIEL: {min_bytes}-{max_bytes} Bytes (ca. {target_chars}-{target_chars+15} Zeichen)
+FIELD TYPE: {field_type_hint}
 
-PRODUKTKONTEXT:
-{product_context[:1000] if product_context else "Nicht verfügbar"}
+{lang_hint}
 
-STRENGE REGELN:
-1. Der Text MUSS zwischen {min_bytes} und {max_bytes} Bytes liegen!
-2. Umlaute (ä,ö,ü,ß) = 2 Bytes, Sonderzeichen beachten!
-3. VOLLSTÄNDIGE SÄTZE - niemals mitten im Satz abbrechen!
-4. Behalte technische Bezeichnungen: "18/10 Edelstahl", "BPA-frei", "0,5L"
-5. Der Text muss SINN ergeben und lesbar sein!
-6. Behalte die wichtigsten Produktinfos
+PRODUCT CONTEXT:
+{product_context[:1000] if product_context else "N/A"}
 
-TEXT ZUM ANPASSEN:
+RULES:
+1. Write EXACTLY {target_word_count} words (±2 words)!
+2. COMPLETE SENTENCES - never cut off mid-sentence or mid-word!
+3. Keep technical terms exactly as-is: "18/10 Edelstahl", "BPA-frei", "0,5L"
+4. Text must make sense and be readable!
+5. Keep the most important product information!
+6. Do NOT change the language of the text!
+
+TEXT TO ADJUST ({word_count} words):
 {current_text}
 
-Antworte NUR mit dem angepassten Text:"""
+Respond ONLY with the adjusted text, WITHOUT quotation marks:"""
         
         try:
             resp = client_instance.chat.completions.create(
-                model="gpt-5.1",
+                model=model_name,
                 messages=[
-                    {"role": "system", "content": f"Du passt Texte auf exakt {min_bytes}-{max_bytes} Bytes an. Ziel: ~{target_bytes} Bytes. Vollständige, sinnvolle Sätze!"},
+                    {"role": "system", "content": f"You adjust texts to an exact word count. Target: {target_word_count} words. {field_type_hint} {lang_hint}"},
                     {"role": "user", "content": prompt}
                 ],
                 max_completion_tokens=int(max_bytes / 0.9) + 100
             )
             new_text = resp.choices[0].message.content.strip()
             
-            # Remove quotes if AI added them
             if new_text.startswith('"') and new_text.endswith('"'):
                 new_text = new_text[1:-1]
             if new_text.startswith("'") and new_text.endswith("'"):
                 new_text = new_text[1:-1]
-            # Remove markdown code blocks if present
             if new_text.startswith('```') and new_text.endswith('```'):
                 new_text = new_text[3:-3].strip()
             
             new_bytes = get_byte_length(new_text)
-            logger.info(f"  → {current_bytes} → {new_bytes} bytes")
+            new_words = len(new_text.split())
+            logger.info(f"  → {current_bytes}B/{word_count}W → {new_bytes}B/{new_words}W")
             
-            # Update for next iteration
             current_text = new_text
             
         except Exception as e:
             logger.error(f"Error adjusting text (attempt {attempt + 1}): {e}")
-            # Continue with current text
+            time.sleep(min(2 ** attempt, 10))
     
-    # Final check after all retries
     final_bytes = get_byte_length(current_text)
     if min_bytes <= final_bytes <= max_bytes:
         logger.info(f"✅ {field_name}: {final_bytes} bytes (nach {max_retries} Anpassungen)")
@@ -692,11 +776,12 @@ if opt_file:
                 
                 client = OpenAI(api_key=st.session_state.api_key)
                 
-                # Store prompts locally for thread safety
+                # Store prompts and model locally for thread safety
                 main_prompt_template = st.session_state.main_content_prompt
                 keyword_prompt_template = st.session_state.keyword_prompt
                 verification_prompt_template = st.session_state.verification_prompt
                 lang_instruction = language_options[selected_language]
+                active_model = st.session_state.selected_model
                 
                 def process_product(idx, row, id_col_name, title_col_name, poe_kws):
                     """Process a single product with Call 1 → Call 2 sequentially"""
@@ -713,7 +798,7 @@ if opt_file:
                         main_prompt = main_prompt.replace("{{language}}", lang_instruction)
                         
                         response1 = client.chat.completions.create(
-                            model="gpt-5.1",
+                            model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Amazon SEO-Experte. KRITISCH: Schreibe 100% in der Zielsprache! Keine deutschen Wörter außer Markennamen! OUTPUT: {lang_instruction}"},
                                 {"role": "user", "content": main_prompt}
@@ -735,21 +820,21 @@ if opt_file:
                         titel_bytes = get_byte_length(main_content.artikelname)
                         if titel_bytes < 170 or titel_bytes > 200:
                             main_content.artikelname = ensure_optimal_length_with_ai(
-                                main_content.artikelname, 170, 200, f"Titel P{idx+1}", client, product_data_str)
+                                main_content.artikelname, 170, 200, f"Titel P{idx+1}", client, product_data_str, model_name=active_model, language=lang_instruction)
                         
                         new_bullets = []
                         for i, bp in enumerate(main_content.bullet_points):
                             bp_bytes = get_byte_length(bp)
                             if bp_bytes < 170 or bp_bytes > 200:
                                 bp = ensure_optimal_length_with_ai(
-                                    bp, 170, 200, f"Bullet {i+1} P{idx+1}", client, product_data_str)
+                                    bp, 170, 200, f"Bullet {i+1} P{idx+1}", client, product_data_str, model_name=active_model, language=lang_instruction)
                             new_bullets.append(bp)
                         main_content.bullet_points = new_bullets
                         
                         desc_bytes = get_byte_length(main_content.produktbeschreibung)
                         if desc_bytes < 1700 or desc_bytes > 2000:
                             main_content.produktbeschreibung = ensure_optimal_length_with_ai(
-                                main_content.produktbeschreibung, 1700, 2000, f"Beschreibung P{idx+1}", client, product_data_str)
+                                main_content.produktbeschreibung, 1700, 2000, f"Beschreibung P{idx+1}", client, product_data_str, model_name=active_model, language=lang_instruction)
                         
                         # ========================================
                         # CALL 2: Keywords (bekommt Output von Call 1)
@@ -775,7 +860,7 @@ if opt_file:
                         kw_prompt = kw_prompt.replace("{{poe_data}}", poe_data_str)
                         
                         response2 = client.chat.completions.create(
-                            model="gpt-5.1",
+                            model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Keyword-Spezialist. OUTPUT LANGUAGE: {lang_instruction}. NUR komma-getrennte Keywords! KEINE Sätze! KEINE Beschreibungen!"},
                                 {"role": "user", "content": kw_prompt}
@@ -797,7 +882,7 @@ if opt_file:
                         kw_bytes = get_byte_length(keyword_content.suchbegriffe)
                         if kw_bytes < 210 or kw_bytes > 249:
                             keyword_content.suchbegriffe = ensure_optimal_length_with_ai(
-                                keyword_content.suchbegriffe, 210, 249, f"Keywords P{idx+1}", client, product_data_str)
+                                keyword_content.suchbegriffe, 210, 249, f"Keywords P{idx+1}", client, product_data_str, model_name=active_model, language=lang_instruction)
                         
                         # ========================================
                         # CALL 3: Verifikation (prüft und korrigiert nur bei Bedarf)
@@ -816,7 +901,7 @@ if opt_file:
                         verify_prompt = verify_prompt.replace("{{keywords}}", keyword_content.suchbegriffe)
                         
                         response3 = client.chat.completions.create(
-                            model="gpt-5.1",
+                            model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Strenger Qualitätsprüfer für Amazon-Listings. Prüfe und korrigiere NUR bei echten Fehlern! Zielsprache: {lang_instruction}"},
                                 {"role": "user", "content": verify_prompt}
@@ -860,7 +945,7 @@ if opt_file:
                                 title_bytes = get_byte_length(final_title)
                                 if title_bytes < 170 or title_bytes > 200:
                                     final_title = ensure_optimal_length_with_ai(
-                                        final_title, 170, 200, f"Titel P{idx+1} post-verify", client, product_data_str)
+                                        final_title, 170, 200, f"Titel P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
                             
                             # Bullets prüfen (falls geändert)
                             original_bullets = main_content.bullet_points
@@ -869,21 +954,21 @@ if opt_file:
                                     bp_bytes = get_byte_length(final_bullets[i])
                                     if bp_bytes < 170 or bp_bytes > 200:
                                         final_bullets[i] = ensure_optimal_length_with_ai(
-                                            final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str)
+                                            final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
                             
                             # Beschreibung prüfen (falls geändert)
                             if final_description != main_content.produktbeschreibung:
                                 desc_bytes = get_byte_length(final_description)
                                 if desc_bytes < 1700 or desc_bytes > 2000:
                                     final_description = ensure_optimal_length_with_ai(
-                                        final_description, 1700, 2000, f"Beschreibung P{idx+1} post-verify", client, product_data_str)
+                                        final_description, 1700, 2000, f"Beschreibung P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
                             
                             # Keywords prüfen (falls geändert)
                             if final_keywords != keyword_content.suchbegriffe:
                                 kw_bytes = get_byte_length(final_keywords)
                                 if kw_bytes < 210 or kw_bytes > 249:
                                     final_keywords = ensure_optimal_length_with_ai(
-                                        final_keywords, 210, 249, f"Keywords P{idx+1} post-verify", client, product_data_str)
+                                        final_keywords, 210, 249, f"Keywords P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
                         
                         # ========================================
                         # Ergebnis zusammenführen
@@ -917,6 +1002,7 @@ if opt_file:
                 
                 # Process products in parallel
                 status.text(f"🚀 Starte parallele Verarbeitung ({parallel_workers} gleichzeitig)...")
+                error_count = [0]
                 
                 with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
                     futures = {}
@@ -927,7 +1013,15 @@ if opt_file:
                     
                     for future in as_completed(futures):
                         idx = futures[future]
-                        result = future.result()
+                        
+                        try:
+                            result = future.result(timeout=180)
+                        except TimeoutError:
+                            logger.error(f"Produkt {idx + 1}: Timeout nach 180 Sekunden")
+                            result = {"success": False, "error": "Timeout (180s)", "idx": idx}
+                        except Exception as e:
+                            logger.error(f"Produkt {idx + 1}: Unerwarteter Fehler: {e}", exc_info=True)
+                            result = {"success": False, "error": str(e), "idx": idx}
                         
                         with results_lock:
                             completed_count[0] += 1
@@ -958,6 +1052,8 @@ if opt_file:
                                 st.write(f"*({get_byte_length(final_keywords)} bytes)*")
                                 st.caption("**Beschreibung:** " + final_description[:100] + "...")
                         else:
+                            with results_lock:
+                                error_count[0] += 1
                             st.error(f"❌ Fehler bei Produkt {idx + 1}: {result['error']}")
                 
                 # Sort results by original index
@@ -966,7 +1062,11 @@ if opt_file:
                 for r in results:
                     del r["idx"]
                 
-                status.text("✅ Fertig!")
+                if error_count[0] > 0:
+                    status.text(f"✅ Fertig! {len(results)} erfolgreich, {error_count[0]} fehlgeschlagen")
+                    st.warning(f"⚠️ {error_count[0]} von {num_products_opt} Produkten konnten nicht verarbeitet werden. Teilergebnisse sind verfügbar.")
+                else:
+                    status.text(f"✅ Fertig! {len(results)} Produkte erfolgreich verarbeitet")
                 
                 if results:
                     df_result = pd.DataFrame(results)
