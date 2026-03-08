@@ -195,6 +195,7 @@ REGELN:
 4. Im beschreibenden Text nach dem Doppelpunkt KEINE EINZIGEN weiteren CAPS-Wörter! Nur normale Groß-/Kleinschreibung!
 5. Vollständige Sätze, NIEMALS mitten im Wort oder Satz abbrechen!
 6. Jeder Bullet = ca. 25-35 Wörter gesamt (Hook + beschreibender Text)
+7. GRAMMATIK: Achte auf korrekte Grammatik in der Zielsprache! Korrekte Artikel (der/die/das, il/la/lo, the, le/la, el/la), korrekte Fälle, korrekte Satzstruktur!
 
 DIE 5 BULLETS MÜSSEN ABDECKEN:
 1. HAUPTVORTEIL: Der größte Nutzen für den Kunden
@@ -237,6 +238,13 @@ WICHTIG: Nutze die Länge MAXIMAL aus! Kurze Texte verschwenden SEO-Potenzial!
 - ERFINDE NICHTS was nicht in den Produktdaten steht!
 - Behalte technische Bezeichnungen EXAKT: "18/10 Edelstahl", "BPA-frei", "0,5L"
 - Titel muss LESBAR sein - nicht nur Keywords aneinanderreihen!
+
+✅ GRAMMATIK (PFLICHT!):
+- Achte auf KORREKTE GRAMMATIK in der Zielsprache!
+- Korrekte Artikel: der/die/das (DE), il/la/lo/gli/le (IT), the (EN), le/la/les (FR), el/la/los/las (ES)
+- Korrekte Fälle, Deklinationen und Konjugationen!
+- Jeder Satz muss grammatikalisch vollständig und korrekt sein!
+- Beschreibender Text nach dem Bullet-Hook MUSS mit korrektem Artikel beginnen wenn nötig!
 
 WICHTIG: Sachliche Produktinfos! ERFINDE NICHTS! Titel muss LESBAR sein - nicht nur Keywords aneinanderreihen!
 """
@@ -363,14 +371,22 @@ KEYWORDS: {{keywords}}
 
 3. BULLET-FORMAT (JEDER einzelne Bullet prüfen!):
    ❌ FEHLER: Kein HOOK am Anfang (muss 2-4 CAPS-Wörter + Doppelpunkt sein!)
+   ❌ FEHLER: Hook ist NICHT komplett in GROSSBUCHSTABEN! JEDER Buchstabe im Hook MUSS CAPS sein!
    ❌ FEHLER: Kein Doppelpunkt nach HOOK
    ❌ FEHLER: Weitere CAPS-Wörter im beschreibenden Text nach dem Doppelpunkt
    ❌ FEHLER: Unvollständiger Satz (abgebrochen, letztes Wort unvollständig)
    → Wenn Hook fehlt: Füge einen passenden HOOK hinzu!
-   → Wenn CAPS im Text: Wandle in normale Schreibweise um!
+   → Wenn Hook nicht komplett CAPS: Wandle den Hook in GROSSBUCHSTABEN um!
+   → Wenn CAPS im Text nach Doppelpunkt: Wandle in normale Schreibweise um!
    → Wenn Satz abgebrochen: Vervollständige den Satz!
 
-4. KEYWORDS:
+4. GRAMMATIK (JEDES Feld prüfen!):
+   ❌ FEHLER: Fehlende oder falsche Artikel (der/die/das, il/la/lo, the, le/la, el/la)
+   ❌ FEHLER: Falsche Fälle oder Deklinationen
+   ❌ FEHLER: Unvollständige oder grammatikalisch falsche Sätze
+   → Korrigiere Grammatikfehler! Jeder Satz muss grammatikalisch korrekt sein!
+
+5. KEYWORDS:
    ❌ FEHLER: Enthält Punkte (.) → ENTFERNE alle Punkte!
    ❌ FEHLER: Ganze Sätze statt komma-getrennte Wörter → Zerlege in einzelne Keywords!
    ❌ FEHLER: Keywords mit mehr als 3 Wörtern → Kürze auf 1-3 Wörter!
@@ -411,6 +427,22 @@ if 'keyword_prompt' not in st.session_state:
     st.session_state.keyword_prompt = KEYWORD_PROMPT
 if 'verification_prompt' not in st.session_state:
     st.session_state.verification_prompt = VERIFICATION_PROMPT
+
+# Persistent run state — survives browser reconnects and Streamlit reruns
+if 'opt_results' not in st.session_state:
+    st.session_state.opt_results = []
+if 'opt_excel_bytes' not in st.session_state:
+    st.session_state.opt_excel_bytes = None
+if 'opt_is_running' not in st.session_state:
+    st.session_state.opt_is_running = False
+if 'opt_error_count' not in st.session_state:
+    st.session_state.opt_error_count = 0
+if 'opt_timestamp' not in st.session_state:
+    st.session_state.opt_timestamp = None
+if 'opt_last_update' not in st.session_state:
+    st.session_state.opt_last_update = None
+if 'opt_total' not in st.session_state:
+    st.session_state.opt_total = 0
 
 # Title
 st.title("✍️ Amazon Content Optimizer")
@@ -489,6 +521,13 @@ with st.sidebar:
 def get_byte_length(text: str) -> int:
     return len(text.encode('utf-8'))
 
+def enforce_hook_caps(bullet: str) -> str:
+    """Programmatically ensure the hook (text before first colon) is ALL CAPS."""
+    if ":" not in bullet:
+        return bullet
+    hook, rest = bullet.split(":", 1)
+    return hook.upper() + ":" + rest
+
 def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, field_name: str, client_instance, product_context: str = "", max_retries: int = 5, model_name: str = "gpt-5.1", language: str = "") -> str:
     """
     Ensure text is within optimal byte range using word-count guidance.
@@ -512,7 +551,7 @@ def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, fie
     if "titel" in field_lower or "title" in field_lower:
         field_type_hint = "Amazon product title. NO period at the end! NO full sentence! Comma-separated feature listing only."
     elif "bullet" in field_lower:
-        field_type_hint = "Amazon bullet point. Format: HOOK IN CAPS: Descriptive text. Complete sentence, NEVER cut off mid-sentence!"
+        field_type_hint = "Amazon bullet point. Format: HOOK IN ALL CAPS: Descriptive text in normal case. The HOOK (2-4 words before the colon) MUST be entirely in UPPERCASE. Text after the colon must be grammatically correct with proper articles. Complete sentence, NEVER cut off mid-sentence!"
     elif "keyword" in field_lower:
         field_type_hint = "Amazon backend keywords. ONLY comma-separated words/phrases (1-3 words). NO sentences! NO periods!"
     else:
@@ -760,19 +799,38 @@ if opt_file:
         
         num_products_opt = st.slider("Anzahl Produkte", 1, len(df_opt), min(5, len(df_opt)), key="opt_slider")
         
-        # Parallelization slider
-        parallel_workers = st.slider("Parallele Verarbeitung", 1, 5, 3, key="parallel_slider", 
+        # Parallelization slider — capped at 3 to avoid memory pressure on free Streamlit Cloud
+        parallel_workers = st.slider("Parallele Verarbeitung", 1, 3, 3, key="parallel_slider", 
                                      help="Anzahl der Produkte die gleichzeitig verarbeitet werden")
         
         if st.button("🚀 Optimierung Starten", type="primary", key="opt_start", use_container_width=True):
             if not st.session_state.get('api_key', '').strip():
                 st.error("❌ Bitte API Key in der Seitenleiste eingeben")
             else:
-                results = []
+                # Guard: if a run is already active (and not stale), prevent duplicate execution.
+                # A run is considered stale if no progress was recorded in the last 10 minutes,
+                # which means the background threads likely crashed or the container was restarted.
+                if st.session_state.opt_is_running:
+                    last = st.session_state.opt_last_update
+                    stale = last is None or (pd.Timestamp.now() - last).total_seconds() > 600
+                    if not stale:
+                        st.warning("⚠️ Ein Lauf ist bereits aktiv. Bitte warten bis er abgeschlossen ist.")
+                        st.stop()
+                    # stale run — reset and allow fresh start
+
+                # Reset all run state for the new run
+                st.session_state.opt_results = []
+                st.session_state.opt_excel_bytes = None
+                st.session_state.opt_error_count = 0
+                st.session_state.opt_is_running = True
+                st.session_state.opt_last_update = pd.Timestamp.now()
+                st.session_state.opt_total = num_products_opt
+                st.session_state.opt_timestamp = None
+
                 results_lock = threading.Lock()
                 progress_bar = st.progress(0)
                 status = st.empty()
-                completed_count = [0]  # Mutable for thread access
+                completed_count = [0]  # Main-thread-only progress counter
                 
                 client = OpenAI(api_key=st.session_state.api_key)
                 
@@ -783,6 +841,23 @@ if opt_file:
                 lang_instruction = language_options[selected_language]
                 active_model = st.session_state.selected_model
                 
+                def call_openai_with_retry(fn, *args, max_retries=3, **kwargs):
+                    """Call an OpenAI API function with exponential-backoff retries.
+
+                    Retries on rate limits, connection errors, and transient server errors.
+                    Raises on the final attempt so the caller can mark the product as failed.
+                    """
+                    import openai as _openai
+                    for attempt in range(max_retries):
+                        try:
+                            return fn(*args, **kwargs)
+                        except (_openai.RateLimitError, _openai.APIConnectionError, _openai.InternalServerError) as e:
+                            if attempt == max_retries - 1:
+                                raise
+                            wait = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                            logger.warning(f"OpenAI transient error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
+                            time.sleep(wait)
+
                 def process_product(idx, row, id_col_name, title_col_name, poe_kws):
                     """Process a single product with Call 1 → Call 2 sequentially"""
                     product_data_str = "\n".join([f"- {k}: {v}" for k, v in row.to_dict().items() if pd.notna(v)])
@@ -797,7 +872,8 @@ if opt_file:
                         main_prompt = main_prompt.replace("{{product_data}}", product_data_str)
                         main_prompt = main_prompt.replace("{{language}}", lang_instruction)
                         
-                        response1 = client.chat.completions.create(
+                        response1 = call_openai_with_retry(
+                            client.chat.completions.create,
                             model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Amazon SEO-Experte. KRITISCH: Schreibe 100% in der Zielsprache! Keine deutschen Wörter außer Markennamen! OUTPUT: {lang_instruction}"},
@@ -811,7 +887,8 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=4000
+                            max_completion_tokens=4000,
+                            timeout=120
                         )
                         
                         main_content = MainContent.model_validate_json(response1.choices[0].message.content)
@@ -828,7 +905,7 @@ if opt_file:
                             if bp_bytes < 170 or bp_bytes > 200:
                                 bp = ensure_optimal_length_with_ai(
                                     bp, 170, 200, f"Bullet {i+1} P{idx+1}", client, product_data_str, model_name=active_model, language=lang_instruction)
-                            new_bullets.append(bp)
+                            new_bullets.append(enforce_hook_caps(bp))
                         main_content.bullet_points = new_bullets
                         
                         desc_bytes = get_byte_length(main_content.produktbeschreibung)
@@ -859,7 +936,8 @@ if opt_file:
                         kw_prompt = kw_prompt.replace("{{description}}", main_content.produktbeschreibung)
                         kw_prompt = kw_prompt.replace("{{poe_data}}", poe_data_str)
                         
-                        response2 = client.chat.completions.create(
+                        response2 = call_openai_with_retry(
+                            client.chat.completions.create,
                             model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Keyword-Spezialist. OUTPUT LANGUAGE: {lang_instruction}. NUR komma-getrennte Keywords! KEINE Sätze! KEINE Beschreibungen!"},
@@ -873,7 +951,8 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=500
+                            max_completion_tokens=500,
+                            timeout=120
                         )
                         
                         keyword_content = KeywordContent.model_validate_json(response2.choices[0].message.content)
@@ -900,7 +979,8 @@ if opt_file:
                         verify_prompt = verify_prompt.replace("{{description}}", main_content.produktbeschreibung)
                         verify_prompt = verify_prompt.replace("{{keywords}}", keyword_content.suchbegriffe)
                         
-                        response3 = client.chat.completions.create(
+                        response3 = call_openai_with_retry(
+                            client.chat.completions.create,
                             model=active_model,
                             messages=[
                                 {"role": "system", "content": f"Strenger Qualitätsprüfer für Amazon-Listings. Prüfe und korrigiere NUR bei echten Fehlern! Zielsprache: {lang_instruction}"},
@@ -914,7 +994,8 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=4000
+                            max_completion_tokens=4000,
+                            timeout=120
                         )
                         
                         verification = VerificationResult.model_validate_json(response3.choices[0].message.content)
@@ -922,11 +1003,11 @@ if opt_file:
                         # Übernehme verifizierte/korrigierte Werte
                         final_title = verification.artikelname
                         final_bullets = [
-                            verification.bullet_1,
-                            verification.bullet_2,
-                            verification.bullet_3,
-                            verification.bullet_4,
-                            verification.bullet_5
+                            enforce_hook_caps(verification.bullet_1),
+                            enforce_hook_caps(verification.bullet_2),
+                            enforce_hook_caps(verification.bullet_3),
+                            enforce_hook_caps(verification.bullet_4),
+                            enforce_hook_caps(verification.bullet_5)
                         ]
                         final_description = verification.produktbeschreibung
                         final_keywords = verification.suchbegriffe
@@ -955,6 +1036,7 @@ if opt_file:
                                     if bp_bytes < 170 or bp_bytes > 200:
                                         final_bullets[i] = ensure_optimal_length_with_ai(
                                             final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                                    final_bullets[i] = enforce_hook_caps(final_bullets[i])
                             
                             # Beschreibung prüfen (falls geändert)
                             if final_description != main_content.produktbeschreibung:
@@ -1025,12 +1107,16 @@ if opt_file:
                         
                         with results_lock:
                             completed_count[0] += 1
+                            # Refresh the stale-run timestamp so the guard stays accurate
+                            st.session_state.opt_last_update = pd.Timestamp.now()
                             status.text(f"✅ {completed_count[0]}/{num_products_opt} Produkte fertig...")
                             progress_bar.progress(completed_count[0] / num_products_opt)
                         
                         if result["success"]:
                             with results_lock:
-                                results.append(result["data"])
+                                # Write incrementally to session_state so partial results
+                                # survive a browser reconnect mid-run
+                                st.session_state.opt_results.append(result["data"])
                             
                             final_title = result["final_title"]
                             final_bullets = result["final_bullets"]
@@ -1053,23 +1139,24 @@ if opt_file:
                                 st.caption("**Beschreibung:** " + final_description[:100] + "...")
                         else:
                             with results_lock:
-                                error_count[0] += 1
+                                st.session_state.opt_error_count += 1
                             st.error(f"❌ Fehler bei Produkt {idx + 1}: {result['error']}")
                 
-                # Sort results by original index
-                results.sort(key=lambda x: x["idx"])
-                # Remove idx from final output
-                for r in results:
+                # Sort results by original index and strip the internal idx field
+                st.session_state.opt_results.sort(key=lambda x: x["idx"])
+                for r in st.session_state.opt_results:
                     del r["idx"]
-                
-                if error_count[0] > 0:
-                    status.text(f"✅ Fertig! {len(results)} erfolgreich, {error_count[0]} fehlgeschlagen")
-                    st.warning(f"⚠️ {error_count[0]} von {num_products_opt} Produkten konnten nicht verarbeitet werden. Teilergebnisse sind verfügbar.")
+
+                err = st.session_state.opt_error_count
+                completed = len(st.session_state.opt_results)
+                if err > 0:
+                    status.text(f"✅ Fertig! {completed} erfolgreich, {err} fehlgeschlagen")
+                    st.warning(f"⚠️ {err} von {num_products_opt} Produkten konnten nicht verarbeitet werden. Teilergebnisse sind verfügbar.")
                 else:
-                    status.text(f"✅ Fertig! {len(results)} Produkte erfolgreich verarbeitet")
-                
-                if results:
-                    df_result = pd.DataFrame(results)
+                    status.text(f"✅ Fertig! {completed} Produkte erfolgreich verarbeitet")
+
+                if st.session_state.opt_results:
+                    df_result = pd.DataFrame(st.session_state.opt_results)
                     output = io.BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         df_result.to_excel(writer, index=False, sheet_name="Optimized Content")
@@ -1077,18 +1164,68 @@ if opt_file:
                         for column_cells in ws.columns:
                             length = max(len(str(cell.value) or "") for cell in column_cells)
                             ws.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 50)
-                    
                     output.seek(0)
-                    
-                    st.download_button(
-                        "📥 Optimierte Daten herunterladen (XLSX)",
-                        data=output.getvalue(),
-                        file_name=f"cosmo_optimized_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="primary",
-                        use_container_width=True
-                    )
+                    excel_bytes = output.getvalue()
+                    # Persist in session_state (survives browser reconnects and reruns)
+                    st.session_state.opt_excel_bytes = excel_bytes
+                    st.session_state.opt_timestamp = pd.Timestamp.now().strftime('%d.%m.%Y %H:%M:%S')
+                    # Also write to /tmp as a fallback in case session_state is reset
+                    # while the server container is still alive
+                    try:
+                        with open("/tmp/cosmo_latest_result.xlsx", "wb") as f:
+                            f.write(excel_bytes)
+                        with open("/tmp/cosmo_latest_result_meta.txt", "w") as f:
+                            f.write(f"{st.session_state.opt_timestamp}\n{completed}\n{err}")
+                    except Exception as write_err:
+                        logger.warning(f"Could not write fallback file to /tmp: {write_err}")
+
+                st.session_state.opt_is_running = False
                 
     except Exception as e:
         st.error(f"Fehler beim Lesen der Datei: {e}")
         logger.error(f"File read error: {e}", exc_info=True)
+
+# Persistent download section — rendered on every script run so it survives browser
+# reconnects, Firefox tab throttling, and any Streamlit-triggered reruns.
+# Falls back to /tmp file if session_state was reset while the container stayed alive.
+_dl_bytes = st.session_state.get('opt_excel_bytes')
+_dl_ts = st.session_state.get('opt_timestamp', '')
+_dl_completed = len(st.session_state.get('opt_results', []))
+_dl_err = st.session_state.get('opt_error_count', 0)
+_dl_from_cache = False
+
+if not _dl_bytes:
+    try:
+        import os
+        if os.path.exists("/tmp/cosmo_latest_result.xlsx"):
+            with open("/tmp/cosmo_latest_result.xlsx", "rb") as f:
+                _dl_bytes = f.read()
+            if os.path.exists("/tmp/cosmo_latest_result_meta.txt"):
+                with open("/tmp/cosmo_latest_result_meta.txt") as f:
+                    lines = f.read().splitlines()
+                    _dl_ts = lines[0] if len(lines) > 0 else ''
+                    _dl_completed = int(lines[1]) if len(lines) > 1 else 0
+                    _dl_err = int(lines[2]) if len(lines) > 2 else 0
+            _dl_from_cache = True
+    except Exception:
+        pass
+
+if _dl_bytes:
+    st.divider()
+    label = (
+        f"✅ Letzter Lauf abgeschlossen: {_dl_ts} — {_dl_completed} Produkte erfolgreich"
+        + (f", {_dl_err} fehlgeschlagen" if _dl_err else "")
+    )
+    if _dl_from_cache:
+        label += " *(aus Zwischenspeicher wiederhergestellt)*"
+    st.success(label)
+    safe_ts = _dl_ts.replace(":", "").replace(".", "").replace(" ", "_") if _dl_ts else "result"
+    st.download_button(
+        "📥 Optimierte Daten herunterladen (XLSX)",
+        data=_dl_bytes,
+        file_name=f"cosmo_optimized_{safe_ts}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        use_container_width=True,
+        key="persistent_download"
+    )
