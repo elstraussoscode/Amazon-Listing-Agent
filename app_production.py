@@ -443,6 +443,8 @@ if 'opt_last_update' not in st.session_state:
     st.session_state.opt_last_update = None
 if 'opt_total' not in st.session_state:
     st.session_state.opt_total = 0
+if 'opt_chunks' not in st.session_state:
+    st.session_state.opt_chunks = []
 
 # Title
 st.title("✍️ Amazon Content Optimizer")
@@ -518,6 +520,19 @@ with st.sidebar:
             st.success("✅ Prompts gespeichert!")
 
 # Helper functions
+def build_excel_bytes(rows):
+    """Build an Excel file in memory from a list of result dicts and return the bytes."""
+    df = pd.DataFrame(rows)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="Optimized Content")
+        ws = writer.sheets["Optimized Content"]
+        for column_cells in ws.columns:
+            length = max(len(str(cell.value) or "") for cell in column_cells)
+            ws.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 50)
+    buf.seek(0)
+    return buf.getvalue()
+
 def get_byte_length(text: str) -> int:
     return len(text.encode('utf-8'))
 
@@ -537,25 +552,16 @@ def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, fie
     """
     current_text = text
     current_bytes = get_byte_length(current_text)
-    
+    best_text = current_text  # track the closest result to the target range
+    best_distance = abs(current_bytes - (min_bytes + max_bytes) // 2)
+
     if min_bytes <= current_bytes <= max_bytes:
         logger.info(f"✅ {field_name}: {current_bytes} bytes (OK)")
         return current_text
     
-    # Aim at 70% up the range — safety margin below max
-    target_bytes = min_bytes + int((max_bytes - min_bytes) * 0.7)
+    target_bytes = (min_bytes + max_bytes) // 2
     
-    lang_hint = f"CRITICAL: Output MUST be 100% in {language}. Do NOT change the language!" if language else ""
-    
-    field_lower = field_name.lower()
-    if "titel" in field_lower or "title" in field_lower:
-        field_type_hint = "Amazon product title. NO period at the end! NO full sentence! Comma-separated feature listing only."
-    elif "bullet" in field_lower:
-        field_type_hint = "Amazon bullet point. Format: HOOK IN ALL CAPS: Descriptive text in normal case. The HOOK (2-4 words before the colon) MUST be entirely in UPPERCASE. Text after the colon must be grammatically correct with proper articles. Complete sentence, NEVER cut off mid-sentence!"
-    elif "keyword" in field_lower:
-        field_type_hint = "Amazon backend keywords. ONLY comma-separated words/phrases (1-3 words). NO sentences! NO periods!"
-    else:
-        field_type_hint = "Amazon product description. Complete, readable sentences."
+    lang_hint = f"Output MUST stay in {language}." if language else ""
     
     for attempt in range(max_retries):
         current_bytes = get_byte_length(current_text)
@@ -564,52 +570,40 @@ def ensure_optimal_length_with_ai(text: str, min_bytes: int, max_bytes: int, fie
             logger.info(f"✅ {field_name}: {current_bytes} bytes (nach {attempt} Anpassungen)")
             return current_text
         
+        byte_diff = target_bytes - current_bytes
         words = current_text.split()
         word_count = len(words)
-        avg_bytes_per_word = current_bytes / word_count if word_count > 0 else 6
+        avg_bytes_per_word = current_bytes / word_count if word_count > 0 else 7
         target_word_count = round(target_bytes / avg_bytes_per_word)
         word_diff = target_word_count - word_count
         
         if current_bytes < min_bytes:
             action = "EXPAND"
-            word_instruction = f"Add approximately {abs(word_diff)} words with relevant product details. Target: {target_word_count} words total."
+            instruction = f"Make the text longer by roughly {abs(byte_diff)} bytes / {abs(word_diff)} words. Add relevant product details."
         else:
             action = "SHORTEN"
-            word_instruction = f"Remove approximately {abs(word_diff)} words. Target: {target_word_count} words total."
+            instruction = f"Make the text shorter by roughly {abs(byte_diff)} bytes / {abs(word_diff)} words. Remove less important details."
         
-        logger.info(f"⚠️ {field_name} ({current_bytes}B, {word_count}W → target: ~{target_word_count}W). Attempt {attempt + 1}/{max_retries}...")
+        logger.info(f"⚠️ {field_name} ({current_bytes}B, {word_count}W, target: {min_bytes}-{max_bytes}B / ~{target_word_count}W). Attempt {attempt + 1}/{max_retries}...")
         
-        prompt = f"""{action} this text. It currently has {word_count} words.
-{word_instruction}
-
-FIELD TYPE: {field_type_hint}
-
+        prompt = f"""{action} this text. {instruction}
+Currently: {current_bytes} bytes, {word_count} words.
+Target: {min_bytes}-{max_bytes} bytes, approximately {target_word_count} words.
 {lang_hint}
+Keep the same style, format and language. Do not cut off mid-sentence.
 
-PRODUCT CONTEXT:
-{product_context[:1000] if product_context else "N/A"}
-
-RULES:
-1. Write EXACTLY {target_word_count} words (±2 words)!
-2. COMPLETE SENTENCES - never cut off mid-sentence or mid-word!
-3. Keep technical terms exactly as-is: "18/10 Edelstahl", "BPA-frei", "0,5L"
-4. Text must make sense and be readable!
-5. Keep the most important product information!
-6. Do NOT change the language of the text!
-
-TEXT TO ADJUST ({word_count} words):
+TEXT:
 {current_text}
 
-Respond ONLY with the adjusted text, WITHOUT quotation marks:"""
+Respond ONLY with the adjusted text:"""
         
         try:
             resp = client_instance.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": f"You adjust texts to an exact word count. Target: {target_word_count} words. {field_type_hint} {lang_hint}"},
+                    {"role": "system", "content": f"You adjust text length. Target: {min_bytes}-{max_bytes} bytes. {lang_hint} Return ONLY the adjusted text."},
                     {"role": "user", "content": prompt}
-                ],
-                max_completion_tokens=int(max_bytes / 0.9) + 100
+                ]
             )
             new_text = resp.choices[0].message.content.strip()
             
@@ -623,20 +617,30 @@ Respond ONLY with the adjusted text, WITHOUT quotation marks:"""
             new_bytes = get_byte_length(new_text)
             new_words = len(new_text.split())
             logger.info(f"  → {current_bytes}B/{word_count}W → {new_bytes}B/{new_words}W")
-            
-            current_text = new_text
-            
+
+            if new_bytes > 0:
+                # Only accept non-empty responses to prevent cascading empty-string loop
+                current_text = new_text
+                dist = abs(new_bytes - (min_bytes + max_bytes) // 2)
+                if new_bytes > 0 and dist < best_distance:
+                    best_text = new_text
+                    best_distance = dist
+                if min_bytes <= new_bytes <= max_bytes:
+                    break
+            else:
+                logger.warning(f"  → Leere Antwort erhalten, behalte vorherigen Text ({current_bytes}B)")
+
         except Exception as e:
             logger.error(f"Error adjusting text (attempt {attempt + 1}): {e}")
             time.sleep(min(2 ** attempt, 10))
-    
-    final_bytes = get_byte_length(current_text)
+
+    final_bytes = get_byte_length(best_text)
     if min_bytes <= final_bytes <= max_bytes:
         logger.info(f"✅ {field_name}: {final_bytes} bytes (nach {max_retries} Anpassungen)")
     else:
         logger.warning(f"⚠️ {field_name}: {final_bytes} bytes - konnte nicht in Zielbereich {min_bytes}-{max_bytes} gebracht werden!")
-    
-    return current_text
+
+    return best_text
 
 
 # Main Content
@@ -797,10 +801,20 @@ if opt_file:
         with col2:
             title_col = st.selectbox("Spalte für Alten Titel (Optional)", ["-"] + cols, index=title_col_idx)
         
-        num_products_opt = st.slider("Anzahl Produkte", 1, len(df_opt), min(5, len(df_opt)), key="opt_slider")
+        total_products = len(df_opt)
+        product_range = st.slider(
+            "Produktbereich (Start bis Ende, beide inklusive)",
+            min_value=1, max_value=total_products,
+            value=(1, min(5, total_products)),
+            key="opt_range_slider",
+            help=f"Wählen Sie den Bereich der Produkte aus. z.B. 2 bis 49 bedeutet Produkt 2 und 49 sind beide enthalten."
+        )
+        start_idx = product_range[0] - 1  # convert to 0-based
+        end_idx = product_range[1]        # exclusive end for range()
+        num_products_opt = end_idx - start_idx
+        st.caption(f"→ {num_products_opt} Produkte werden verarbeitet (Produkt {product_range[0]} bis {product_range[1]}, beide inklusive)")
         
-        # Parallelization slider — capped at 3 to avoid memory pressure on free Streamlit Cloud
-        parallel_workers = st.slider("Parallele Verarbeitung", 1, 3, 3, key="parallel_slider", 
+        parallel_workers = st.slider("Parallele Verarbeitung", 1, 5, 3, key="parallel_slider", 
                                      help="Anzahl der Produkte die gleichzeitig verarbeitet werden")
         
         if st.button("🚀 Optimierung Starten", type="primary", key="opt_start", use_container_width=True):
@@ -826,6 +840,7 @@ if opt_file:
                 st.session_state.opt_last_update = pd.Timestamp.now()
                 st.session_state.opt_total = num_products_opt
                 st.session_state.opt_timestamp = None
+                st.session_state.opt_chunks = []
 
                 results_lock = threading.Lock()
                 progress_bar = st.progress(0)
@@ -844,14 +859,21 @@ if opt_file:
                 def call_openai_with_retry(fn, *args, max_retries=3, **kwargs):
                     """Call an OpenAI API function with exponential-backoff retries.
 
-                    Retries on rate limits, connection errors, and transient server errors.
+                    Retries on rate limits, connection errors, transient server errors,
+                    and empty response content (gpt-5.1 structured output can return '' on HTTP 200).
                     Raises on the final attempt so the caller can mark the product as failed.
                     """
                     import openai as _openai
                     for attempt in range(max_retries):
                         try:
-                            return fn(*args, **kwargs)
-                        except (_openai.RateLimitError, _openai.APIConnectionError, _openai.InternalServerError) as e:
+                            result = fn(*args, **kwargs)
+                            # Detect empty structured-output responses (HTTP 200, content='')
+                            if (hasattr(result, 'choices') and result.choices
+                                    and not result.choices[0].message.content):
+                                raise ValueError("Empty response content from API (structured output failure)")
+                            return result
+                        except (_openai.RateLimitError, _openai.APIConnectionError,
+                                _openai.InternalServerError, ValueError) as e:
                             if attempt == max_retries - 1:
                                 raise
                             wait = 2 ** (attempt + 1)  # 2s, 4s, 8s
@@ -887,7 +909,6 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=4000,
                             timeout=120
                         )
                         
@@ -951,7 +972,6 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=500,
                             timeout=120
                         )
                         
@@ -994,7 +1014,6 @@ if opt_file:
                                     "strict": True
                                 }
                             },
-                            max_completion_tokens=4000,
                             timeout=120
                         )
                         
@@ -1016,41 +1035,73 @@ if opt_file:
                             logger.info(f"Produkt {idx + 1}: ✅ Verifikation bestanden")
                         else:
                             logger.info(f"Produkt {idx + 1}: ⚠️ Korrekturen: {verification.issues_found}")
-                            
-                            # ========================================
-                            # Längenkorrektur für geänderte Texte nach Verifikation
-                            # ========================================
-                            
-                            # Titel prüfen (falls geändert)
-                            if final_title != main_content.artikelname:
-                                title_bytes = get_byte_length(final_title)
-                                if title_bytes < 170 or title_bytes > 200:
-                                    final_title = ensure_optimal_length_with_ai(
-                                        final_title, 170, 200, f"Titel P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
-                            
-                            # Bullets prüfen (falls geändert)
-                            original_bullets = main_content.bullet_points
-                            for i in range(5):
-                                if i < len(original_bullets) and final_bullets[i] != original_bullets[i]:
-                                    bp_bytes = get_byte_length(final_bullets[i])
-                                    if bp_bytes < 170 or bp_bytes > 200:
-                                        final_bullets[i] = ensure_optimal_length_with_ai(
-                                            final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
-                                    final_bullets[i] = enforce_hook_caps(final_bullets[i])
-                            
-                            # Beschreibung prüfen (falls geändert)
-                            if final_description != main_content.produktbeschreibung:
-                                desc_bytes = get_byte_length(final_description)
-                                if desc_bytes < 1700 or desc_bytes > 2000:
-                                    final_description = ensure_optimal_length_with_ai(
-                                        final_description, 1700, 2000, f"Beschreibung P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
-                            
-                            # Keywords prüfen (falls geändert)
-                            if final_keywords != keyword_content.suchbegriffe:
-                                kw_bytes = get_byte_length(final_keywords)
-                                if kw_bytes < 210 or kw_bytes > 249:
-                                    final_keywords = ensure_optimal_length_with_ai(
-                                        final_keywords, 210, 249, f"Keywords P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                        
+                        # ========================================
+                        # Längenkorrektur nach Verifikation — runs always, not just
+                        # when corrections were made, because the verification model
+                        # can subtly change text even when it says "approved"
+                        # ========================================
+                        
+                        title_bytes = get_byte_length(final_title)
+                        if title_bytes < 170 or title_bytes > 200:
+                            final_title = ensure_optimal_length_with_ai(
+                                final_title, 170, 200, f"Titel P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                        
+                        for i in range(len(final_bullets)):
+                            bp_bytes = get_byte_length(final_bullets[i])
+                            if bp_bytes < 170 or bp_bytes > 200:
+                                final_bullets[i] = ensure_optimal_length_with_ai(
+                                    final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                            final_bullets[i] = enforce_hook_caps(final_bullets[i])
+                        
+                        desc_bytes = get_byte_length(final_description)
+                        if desc_bytes < 1700 or desc_bytes > 2000:
+                            final_description = ensure_optimal_length_with_ai(
+                                final_description, 1700, 2000, f"Beschreibung P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                        
+                        kw_bytes = get_byte_length(final_keywords)
+                        if kw_bytes < 210 or kw_bytes > 249:
+                            final_keywords = ensure_optimal_length_with_ai(
+                                final_keywords, 210, 249, f"Keywords P{idx+1} post-verify", client, product_data_str, model_name=active_model, language=lang_instruction)
+                        
+                        # ========================================
+                        # Final length guarantee — if still over max, retry the
+                        # specific field with a 10% lower target range to give
+                        # the AI more room. For keywords, drop the last keyword
+                        # that pushes over the boundary.
+                        # ========================================
+                        def enforce_max(text, min_b, max_b, field_label):
+                            """If over max, retry with a lower target range (10% below min)."""
+                            current_b = get_byte_length(text)
+                            if current_b <= max_b:
+                                return text
+                            range_size = max_b - min_b
+                            lower_min = min_b - int(range_size * 1.0)
+                            lower_max = max_b - int(range_size * 0.5)
+                            word_count = len(text.split())
+                            avg_bpw = current_b / word_count if word_count > 0 else 7
+                            target_words = round((lower_min + lower_max) / 2 / avg_bpw)
+                            logger.warning(f"{field_label}: {current_b}B/{word_count}W still over {max_b}B, retrying with target {lower_min}-{lower_max}B / ~{target_words}W")
+                            return ensure_optimal_length_with_ai(
+                                text, lower_min, lower_max, f"{field_label} final-fix",
+                                client, product_data_str, model_name=active_model,
+                                language=lang_instruction, max_retries=3)
+
+                        def enforce_keywords_max(text, max_b):
+                            """Drop entire trailing keywords until under max bytes."""
+                            while get_byte_length(text) > max_b:
+                                last_comma = text.rfind(',')
+                                if last_comma <= 0:
+                                    break
+                                text = text[:last_comma].rstrip()
+                                logger.info(f"Keywords: dropped last keyword, now {get_byte_length(text)}B")
+                            return text
+
+                        final_title = enforce_max(final_title, 170, 200, f"Titel P{idx+1}")
+                        for i in range(len(final_bullets)):
+                            final_bullets[i] = enforce_max(final_bullets[i], 170, 200, f"Bullet {i+1} P{idx+1}")
+                        final_description = enforce_max(final_description, 1700, 2000, f"Beschreibung P{idx+1}")
+                        final_keywords = enforce_keywords_max(final_keywords, 249)
                         
                         # ========================================
                         # Ergebnis zusammenführen
@@ -1088,7 +1139,7 @@ if opt_file:
                 
                 with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
                     futures = {}
-                    for idx in range(num_products_opt):
+                    for idx in range(start_idx, end_idx):
                         row = df_opt.iloc[idx]
                         future = executor.submit(process_product, idx, row, id_col, title_col, poe_keywords)
                         futures[future] = idx
@@ -1137,6 +1188,31 @@ if opt_file:
                                 st.write("**Keywords:**", final_keywords)
                                 st.write(f"*({get_byte_length(final_keywords)} bytes)*")
                                 st.caption("**Beschreibung:** " + final_description[:100] + "...")
+                            # Every 10 successful products, save an incremental snapshot
+                            # and a chunk file so partial results are always downloadable
+                            successful_so_far = len(st.session_state.opt_results)
+                            if successful_so_far > 0 and successful_so_far % 10 == 0:
+                                try:
+                                    snapshot = sorted(st.session_state.opt_results, key=lambda x: x["idx"])
+                                    clean_snapshot = [{k: v for k, v in r.items() if k != "idx"} for r in snapshot]
+                                    snapshot_bytes = build_excel_bytes(clean_snapshot)
+                                    st.session_state.opt_excel_bytes = snapshot_bytes
+                                    with open("/tmp/cosmo_latest_result.xlsx", "wb") as f:
+                                        f.write(snapshot_bytes)
+                                    # Save this batch as a separate chunk
+                                    chunk_start = successful_so_far - 9
+                                    chunk_label = f"Produkte {chunk_start}-{successful_so_far}"
+                                    chunk_rows = clean_snapshot[chunk_start - 1:successful_so_far]
+                                    chunk_bytes = build_excel_bytes(chunk_rows)
+                                    st.session_state.opt_chunks.append({
+                                        "label": chunk_label,
+                                        "bytes": chunk_bytes,
+                                        "count": len(chunk_rows)
+                                    })
+                                    logger.info(f"📦 Zwischenspeicherung: {successful_so_far} Produkte gesichert, Chunk '{chunk_label}' erstellt")
+                                except Exception as snap_err:
+                                    logger.warning(f"Incremental save failed: {snap_err}")
+
                         else:
                             with results_lock:
                                 st.session_state.opt_error_count += 1
@@ -1156,21 +1232,21 @@ if opt_file:
                     status.text(f"✅ Fertig! {completed} Produkte erfolgreich verarbeitet")
 
                 if st.session_state.opt_results:
-                    df_result = pd.DataFrame(st.session_state.opt_results)
-                    output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        df_result.to_excel(writer, index=False, sheet_name="Optimized Content")
-                        ws = writer.sheets["Optimized Content"]
-                        for column_cells in ws.columns:
-                            length = max(len(str(cell.value) or "") for cell in column_cells)
-                            ws.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 50)
-                    output.seek(0)
-                    excel_bytes = output.getvalue()
-                    # Persist in session_state (survives browser reconnects and reruns)
+                    excel_bytes = build_excel_bytes(st.session_state.opt_results)
                     st.session_state.opt_excel_bytes = excel_bytes
                     st.session_state.opt_timestamp = pd.Timestamp.now().strftime('%d.%m.%Y %H:%M:%S')
-                    # Also write to /tmp as a fallback in case session_state is reset
-                    # while the server container is still alive
+
+                    # Save remaining products (after last 10-chunk) as a final chunk
+                    last_chunk_end = len(st.session_state.opt_chunks) * 10
+                    remaining = st.session_state.opt_results[last_chunk_end:]
+                    if remaining:
+                        chunk_label = f"Produkte {last_chunk_end + 1}-{last_chunk_end + len(remaining)}"
+                        st.session_state.opt_chunks.append({
+                            "label": chunk_label,
+                            "bytes": build_excel_bytes(remaining),
+                            "count": len(remaining)
+                        })
+
                     try:
                         with open("/tmp/cosmo_latest_result.xlsx", "wb") as f:
                             f.write(excel_bytes)
@@ -1212,16 +1288,20 @@ if not _dl_bytes:
 
 if _dl_bytes:
     st.divider()
-    label = (
-        f"✅ Letzter Lauf abgeschlossen: {_dl_ts} — {_dl_completed} Produkte erfolgreich"
-        + (f", {_dl_err} fehlgeschlagen" if _dl_err else "")
-    )
+    _is_running = st.session_state.get('opt_is_running', False)
+    if _is_running:
+        label = f"⏳ Lauf aktiv — {_dl_completed} Produkte bisher gesichert"
+    else:
+        label = (
+            f"✅ Letzter Lauf abgeschlossen: {_dl_ts} — {_dl_completed} Produkte erfolgreich"
+            + (f", {_dl_err} fehlgeschlagen" if _dl_err else "")
+        )
     if _dl_from_cache:
         label += " *(aus Zwischenspeicher wiederhergestellt)*"
     st.success(label)
     safe_ts = _dl_ts.replace(":", "").replace(".", "").replace(" ", "_") if _dl_ts else "result"
     st.download_button(
-        "📥 Optimierte Daten herunterladen (XLSX)",
+        "📥 Alle Produkte herunterladen (XLSX)",
         data=_dl_bytes,
         file_name=f"cosmo_optimized_{safe_ts}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1229,3 +1309,17 @@ if _dl_bytes:
         use_container_width=True,
         key="persistent_download"
     )
+
+    # Show individual chunk downloads
+    _chunks = st.session_state.get('opt_chunks', [])
+    if _chunks:
+        with st.expander(f"📦 Einzelne Teillieferungen ({len(_chunks)} Chunks)"):
+            for i, chunk in enumerate(_chunks):
+                st.download_button(
+                    f"📥 {chunk['label']} ({chunk['count']} Produkte)",
+                    data=chunk['bytes'],
+                    file_name=f"cosmo_chunk_{i+1}_{safe_ts}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"chunk_download_{i}"
+                )
